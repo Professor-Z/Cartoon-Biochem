@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNMT1 Live Wallpaper</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #061a2a; color: #fff;
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #canvas-wrap { position: fixed; inset: 0; background: radial-gradient(120% 90% at 50% 35%, #1d6a93 0%, #0c3550 55%, #061a2a 100%); }
+    #canvas-wrap canvas { position: absolute; inset: 0; }
+    #canvas-wrap canvas.far-layer { pointer-events: none; }
+    .glass-panel { background: rgba(30,41,59,0.86); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.10); border-radius: 0 0 0.75rem 0.75rem; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+
+    /* ---------- collapsible top control tab ---------- */
+    #topbar { position: fixed; top: 0; left: 50%; z-index: 10; width: min(980px, calc(100vw - 24px));
+        transform: translateX(-50%); transition: transform 0.42s cubic-bezier(.4,0,.2,1); display: flex; flex-direction: column; align-items: center; }
+    #topbar.collapsed { transform: translate(-50%, calc(-100% + 34px)); }
+    #controls { width: 100%; padding: 0.9rem 1rem 0.6rem; max-height: calc(100vh - 60px); overflow: auto;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.4rem 1.2rem; }
+    .tab-btn { height: 34px; padding: 0 22px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; letter-spacing: 0.2em;
+        border: none; border-radius: 0 0 12px 12px; background: #2f80ff; color: #fff;
+        box-shadow: 0 0 14px rgba(47,128,255,0.75), 0 0 30px rgba(47,128,255,0.35); transition: filter 0.15s; }
+    .tab-btn:hover { filter: brightness(1.12); }
+    .tab-btn .chev { display: inline-block; margin-left: 8px; transition: transform 0.3s; }
+    #topbar.collapsed .tab-btn .chev { transform: rotate(180deg); }
+
+    .sec { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.14em; color: #94a3b8; margin: 0.15rem 0 0.45rem; }
+    .btn-row { display: grid; gap: 0.35rem; margin-bottom: 0.7rem; }
+    .btn-row.two { grid-template-columns: 1fr 1fr; }
+    .btn-row.three { grid-template-columns: 1fr 1fr 1fr; }
+    .btn { font: inherit; font-size: 0.75rem; line-height: 1rem; font-weight: 700; padding: 0.4rem 0.5rem; border-radius: 0.375rem; white-space: nowrap;
+        border: none; background: #374151; color: #fff; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.4); transition: background-color .15s; }
+    .btn:hover { background: #4b5563; }
+    .btn.active { background: #2563eb; }
+    .btn.active:hover { background: #3b82f6; }
+    .btn.tg.active { background: #16a34a; }
+    .btn.tg.active:hover { background: #22c55e; }
+    .btn:focus-visible, input:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+    .slider-row { margin-bottom: 0.65rem; }
+    .slider-row .lbl { display: flex; justify-content: space-between; font-size: 0.74rem; color: #cbd5e1; margin-bottom: 0.25rem; }
+    .slider-row .lbl span:last-child { color: #a5b4fc; font-weight: 700; font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; accent-color: #3b82f6; margin: 0; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 0.7rem; align-items: center; }
+    .sw { width: 26px; height: 26px; border-radius: 6px; border: 2px solid rgba(255,255,255,0.25); cursor: pointer; padding: 0; }
+    .sw.active { border-color: #fff; box-shadow: 0 0 0 2px #2563eb; }
+    .sw-pick { width: 30px; height: 28px; padding: 0; border: none; background: none; cursor: pointer; }
+
+    #bottom-bar { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 6;
+        display: flex; gap: 8px; }
+    .btn.pill { min-width: 7.5rem; padding: 0.6rem 1.2rem; font-size: 0.85rem; border-radius: 999px; letter-spacing: 0.06em;
+        background: rgba(30,41,59,0.9); border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+    .btn.pill:hover { background: #4b5563; }
+    .btn.pill.active { background: #2563eb; }
+    #info-box { position: fixed; left: 16px; bottom: 14px; z-index: 5; display: flex; align-items: flex-end; gap: 8px; max-width: calc(100vw - 32px); }
+    .info-tab { flex: none; height: 30px; padding: 0 14px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; letter-spacing: 0.2em;
+        border: none; border-radius: 10px; background: #22e55e; color: #04290f; box-shadow: 0 0 14px rgba(34,229,94,0.6), 0 0 26px rgba(34,229,94,0.3); }
+    .info-tab:hover { filter: brightness(1.1); }
+    .info-tab[aria-expanded="true"] { background: #16a34a; color: #fff; }
+    #caption { font-size: 0.75rem; color: #cbd5e1; background: rgba(15,23,42,0.75); padding: 0.45rem 0.75rem; border-radius: 0.5rem; min-width: 0; line-height: 1.45; }
+    #caption b { color: #fff; }
+    body.wallpaper #topbar, body.wallpaper #bottom-bar, body.wallpaper #info-box { display: none; }
+</style>
+</head>
+<body>
+<script>
+    // Wallpaper settings from the address:  ?controls=1  ?fps=30  ?quality=1.5  ?crowd=0.3  ?spin=3  ?bg=0..6  ?protein=0..6
+    window.WP = (() => { const q = new URLSearchParams(location.search), n = (k, d) => (q.has(k) && !isNaN(+q.get(k))) ? +q.get(k) : d;
+        return { controls: q.get('controls') === '1', fps: n('fps', 30), dpr: n('quality', 1.5), crowd: n('crowd', null), spin: n('spin', null),
+                 bg: n('bg', null), prot: n('protein', null) }; })();
+    if (!WP.controls) document.body.classList.add('wallpaper');
+</script>
+<div id="canvas-wrap"></div>
+
+<div id="topbar" class="collapsed">
+    <div id="controls" class="glass-panel">
+        <div>
+            <div class="sec">OUTLINES</div>
+            <div class="slider-row"><div class="lbl"><label for="s-outline">Outline thickness</label><span id="v-outline">3.2 px</span></div>
+                <input id="s-outline" type="range" min="0" max="8" step="0.1" value="6.8"></div>
+            <div class="slider-row"><div class="lbl"><label for="s-thin">Lines between atoms</label><span id="v-thin">1.2 px</span></div>
+                <input id="s-thin" type="range" min="0" max="3" step="0.1" value="1.7"></div>
+            <div class="slider-row"><div class="lbl"><label for="s-shade">Shadow size</label><span id="v-shade">0.45</span></div>
+                <input id="s-shade" type="range" min="0" max="1" step="0.05" value="0.8"></div>
+            <div class="slider-row"><div class="lbl"><label for="s-hi">Highlight size</label><span id="v-hi">0.30</span></div>
+                <input id="s-hi" type="range" min="0" max="1" step="0.05" value="0.6"></div>
+        </div>
+        <div>
+            <div class="sec">MODEL</div>
+            <div class="btn-row two">
+                <button class="btn active" id="b-sf">SPACE FILLING</button>
+                <button class="btn" id="b-bs">BALL &amp; STICK</button>
+            </div>
+            <div class="sec">PROTEIN (DNMT1)</div>
+            <div class="btn-row two">
+                <button class="btn active" id="b-surf">SURFACE</button>
+                <button class="btn" id="b-patoms">ATOMS</button>
+            </div>
+            <div class="lbl" style="font-size:0.74rem;color:#cbd5e1;margin-bottom:0.3rem">Protein color</div>
+            <div class="swatches" id="prot-sw" role="group" aria-label="Protein color"></div>
+            <div class="btn-row"><button class="btn tg active" id="b-ribbon" title="Show or hide the protein's backbone ribbons">RIBBONS: ON</button></div>
+            <div class="slider-row"><div class="lbl"><label for="s-conc">Cytosol concentration</label><span id="v-conc">80%</span></div>
+                <input id="s-conc" type="range" min="0.1" max="1.5" step="0.05" value="0.3"></div>
+            <div class="slider-row"><div class="lbl"><label for="s-dnasp">DNA motion speed</label><span id="v-dnasp">1.0×</span></div>
+                <input id="s-dnasp" type="range" min="0" max="4" step="0.1" value="4"></div>
+            <div class="slider-row"><div class="lbl"><label for="s-opac">Protein opacity</label><span id="v-opac">35%</span></div>
+                <input id="s-opac" type="range" min="0" max="1" step="0.01" value="0.56"></div>
+        </div>
+        <div>
+            <div class="sec">CAMERA</div>
+            <div class="slider-row"><div class="lbl"><label for="s-blur">Background blur</label><span id="v-blur">2.5 px</span></div>
+                <input id="s-blur" type="range" min="0" max="10" step="0.5" value="2.5"></div>
+            <div class="lbl" style="font-size:0.74rem;color:#cbd5e1;margin-bottom:0.3rem">Background</div>
+            <div class="swatches" id="bg-sw" role="group" aria-label="Background color"></div>
+            <div class="lbl" style="font-size:0.74rem;color:#cbd5e1;margin-bottom:0.3rem">Auto‑rotate</div>
+            <div class="btn-row three">
+                <button class="btn tg" id="b-rx" title="Tumble forward (screen x axis)">X</button>
+                <button class="btn tg active" id="b-ry" title="Spin left–right (screen y axis)">Y</button>
+                <button class="btn tg" id="b-rz" title="Roll (screen z axis)">Z</button>
+            </div>
+            <div class="slider-row"><div class="lbl"><label for="s-speed">Rotation speed</label><span id="v-speed">20°/s</span></div>
+                <input id="s-speed" type="range" min="2" max="90" step="1" value="3"></div>
+            <div class="btn-row three">
+                <button class="btn" id="v-overview">OVERVIEW</button>
+                <button class="btn" id="v-gap">FLIPPED BASE</button>
+                <button class="btn" id="v-front">CLOSE‑UP</button>
+            </div>
+        </div>
+    </div>
+    <button class="tab-btn" id="tab" aria-expanded="false">CONTROLS<span class="chev">▲</span></button>
+</div>
+
+<div id="bottom-bar">
+    <button class="btn pill" id="b-pause" title="Freeze or resume all motion (Space bar)">⏸ PAUSE</button>
+</div>
+<div id="info-box"><button class="info-tab" id="info-tab" aria-expanded="false" aria-controls="caption">INFO</button><div id="caption" hidden><b>DNMT1 bound to DNA</b> (crystal structure 4DA4) in a crowd of water, ions (K⁺, Na⁺, Cl⁻, Mg²⁺, Ca²⁺), phosphate, glucose, ATP, pyruvate, lactate, succinate, fumarate, acetyl‑CoA and testosterone · drag to rotate, scroll to zoom, arrow keys to move, Space to pause</div></div>
+
+<script>
+(() => {
+    const deg = Math.PI / 180;
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+    const X = V(1, 0, 0), UP = V(0, 1, 0);
+    function perpPart(v, axis) { const a = axis.clone().normalize(); return v.clone().addScaledVector(a, -v.dot(a)); }
+    const CRY = (() => {
+        const D = {"protXYZ":"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Tv9W/0P9S/9M/179Lv9B/1/9Hf9K/1D9T/9i/3P9a/9s/3b9bf+E/4f9iP+Q/4j9m/+I/5j9l/9z/6n9s/+U/5j9Kf8t/3D9Dv8h/3L9+P42/3P94/4z/2b9D/8R/4v9LP8I/4z9PP8f/4L9/P5L/4P95/5g/4b94/5x/2390P6B/2z97P5x/5/9B/9+/6D9Hf9t/639G/9U/6z9MP94/7n99v5v/1r99P5+/0H94v5w/y392P59/xr9EP+D/zX9If+V/0f9OP+P/0v9Ff+q/1L93v5W/zD9zP5H/x/9r/5O/yb9qv5h/zb9z/4o/yP9x/4h/z796/4f/x79nP5B/xn9gP5F/x/9ef49/zv9Zf5H/0b9b/42/wr9c/4Z/wr9if4N///8ZP4E/xX9iP7z/gL9cv7t/g/9if4r/0b9hf4i/2L9hv45/3b9e/44/4v9mP4M/2n9k/7x/lz9oP7a/mz9vf7a/mj9z/7Q/nn9xv7F/pD96f7Q/nP9lf5O/279mv5l/379pf5e/5r9tf5L/5z9gP51/4L9hP6L/5P9nv5s/6/9qP5m/8n9mv5O/9b9p/48/9/9p/5+/9v9u/6U/9X91f6S/939s/6q/8b95/6m/9f9xf6+/8D93/68/8n98f7Q/8P9gP5P/9X9cP46/+P9dP4e/9f9aP4L/+H9U/5C/+b9Rv5H/8v9Pv40/739Qv5g/8P9gv4c/8H9iP4C/7X9pf75/rv9rP7i/rf9tf4L/8X90f4G/8v92f4B/+j98f7+/u/94v4c/7/91/4k/6b9xf4B//r9y/4B/xf+3f7q/iD+6/7t/jP+sP7//ib+nv4X/yX+g/4U/yb+qf4x/yX+cv4q/yX+mf5H/yT+ff5E/yT+bf5a/yT+3f7U/hH+7P68/hr+B/+4/gz+FP+k/hL+2v6j/hf+wP6m/iX+r/67/iH+tP6W/jf+mf64/jD+nP6h/j7+Dv/J/vn9Jv/E/un9QP/N/vf9QP/e/gn+JP/Q/s39H//s/s79Df/C/r79Vv/A/u79cf/J/vf9df/m/u/9bv/t/tj9h/+3/uv9hv+b/vf9ev+X/g3+k/+I/uz9gf/2/gD+hf8S//r9mf8V/+P9m/8q/9f9j/8i/xL+qP8V/x7+ef8m/yf+uf8o/y/+qf8A/979vP8B/8j9tP/y/q79xf/s/p392P/5/tH92//b/tf9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MwDGANYATwDOANYAYQC3AN4AdgCyANAAUwDlAOoARQD/AOIARwAUAfgAPAAvAfAAPABCAQYBWgCpAPMAaACRAPsAawB/AOMAgQB2ANwAWgCCABIBZwBpABwBdgBZAAsBZQBhADcBgwBDABQBcgBKAEABgQA7AC4BVQB5ANYAVgBoAL4AZgB1AKcAbgBnAJQAOgBfALUAMABHAMUAFgA8ALsADgAiAMsAIwANAMcAagCPAKkAewCeAJUAmQCaAJgApwCZAIQAdAC7AJQAWQDBAIgATgCxAHkATQDYAI8AowCZALAAwACWALQAywB7AKoA5AB3AKYAyACZANIA5ACVANYAuQBoAKUAwABOAJwAzgBNAIEA3wA8AHwAqAA7AJ0AoQA1ALoAhQAqAL0AtQAiAMUAyABhAHAA1wBhAFYA9ABoAFsABgFeAE0AygB0AEEAsQCBAEwA3gCIADYA+gB4AG8AFgF+AHcAIgFkAIIAOQFeAHsAGAGUAIwANgGXAJQADQGuAIIAFAFVAJIAHgE7AJoAJgEpAIIAPAEdAIIACQEsAKwA/wA9AMEAFAEoAG8AGAEYAFYAMQEhAEgAQgERAEAA/wAbAEQA/gAIAC0AAwHt/zAA9wASABQAAQHc/xsA9gAAAP7/+wDl/wIANQE8AEcATQFHADwAZgE/AEsAegE5AD8ASwFmADoAPAFuACEAMgGLACMATQFqAAgAYwE9AGYAeQEyAHYAgAEWAG4AmAEQAGsAcQEyAJQAZAFLAJoAbAEFAGkAcwHr/14AgwHt/0UAlwHe/0EAWgHZ/1kATwHN/3IAVQGy/3kAPwHb/4QASwGm/5AANgHQ/5sAPAG1/6EAMgGq/7gAegH//zMAiAEBABkApQEJAB0AtwH9/xEAegEVAAcAiAEWAOb/qgEdAC4AxQEmADUA1gEQAEAA7AELADUAwwE+AEkA3gFLAE4A8AFJADwA4gFXAGMAzAECAFQA3AHt/2EA4gHW/04A+gHP/0sAzQHi/3oA3gHN/4kA3QGy/4EA7QHU/54A7AGf/48A/AHB/6wA/AGn/6QACwKU/7IAzgHK/0EA0wGz/zAA3QG6/xQA6QGp/wcAugGi/y0AsQGU/0cAnQGf/1cAvgF9/08AlQGS/24AtgFw/2cAogF7/3YAmgFv/40A1wHS/wsA4AHb//H/2wHG/9v/7gG8/8///QHi//L/BAL4/wYAAQIUAPr/CQIpAA0AIAI2AAsAJgJJAB0AMQIxAPf/wQG//9f/ugGr/8P/wAGz/6b/xAHL/6H/nAGo/8f/kwHC/9P/qgHK/+X/wAGg/5T/wwGm/3j/qgG0/2z/rQHF/1r/xwGM/2j/4QF+/27/7QFz/1X/3wFb/0v/3gFU/zH/6gFi/x//0QE+/yr/kwGu/3f/egG7/27/aAHC/4X/ZgGz/5n/bAGp/1r/fAGl/0H/egG3/yz/jAGP/z7/iQGz/xX/mwGL/yf/mQGd/xL/WgHZ/4L/SgHk/5j/LgHs/47/LAH7/3v/WAH8/6T/RwEKALn/OQEhALP/RwEBANP/KgEvAMb/OAEPAOf/KgElAOD/GQHh/5r//gDp/5P/7QDy/6r/6gDj/77/7wDU/4L/1ADf/3n/zADW/13/vgDZ/43/4wALAKj/0QAWALz/tgAcAK//tQArAJv/3QAvAMj/0AA8AOH/4gBRAOv/tQBIANr/oQASALv/hgAWAK//dAAkAMP/dgAfANv/egD7/6f/XQD8/5//SgD7/7b/UwDy/8z/MgADALP/YwA2ALj/TwBCAMn/OABNALn/NwBJAKH/XABZANr/UQBZAPb/QABpAP3/WwBHAAcAJgBbAMb/DwBoALj/GQCAAKn/LgCMAK//+f9wAMz/7v9XANn/BACDAOH/CgCIAJT/EgCeAIL/GAC4AJH/LADGAIz//P+iAG3/BQC2AFf/9f/QAFj/AQDlAEj/CgD8AFH/BwADAWr/FQAOAUH/BwC+AKT/CQDWALT/JADZAMH/KwDvAMr/8//WAMn/6P/yAM//5/8DAb3/3//2AOj/MwDEAMP/TgDDAM7/YADXAMD/cwDiAMv/WQCnAM3/dgClANb/fACeAPD/iwCoAMP/lwCbAPj/pQClAMz/qwCeAOb/WgDdAKb/agDvAJf/YwANAZ3/dAAeAZn/aADqAHn/cgDOAHP/TADuAG//SgASAaT/QQAtAav/QgA1Acj/PgBMAc//JAAxAaD/JAAtAYT/RwAhAdr/RQAlAfb/WQA5AQEAcQA5Afv/SAAKAQQAQgALASIAVgAIATUAKAAOASsAUAAIAVAAIgAOAUYANgALAVgAMQAMAXQATwBLARIAXwBhAR4AbgBwAQgAhwByAQkAcwBVATMAZwBOAU4AfQBHAWMAjgBeAWgAqQBeAWgAtgBHAWIAtgB0AW0AXwB5AfT/awCHAd3/ggB2AdH/lwCBAcn/dQCjAeX/YACyAfX/agDPAfr/XwDiAeb/bQD1Adv/hwD5AeL/YgAGAsn/fQBcAc7/kQBJAcP/qgBHAdT/wAA+Acr/mABRAaf/gQBUAZb/qQBOAe7/wQBOAf3/ywAxAQIA4wAsAQIAvwBdARgAxAB7ARYA5ACEAQcA/AByARwAuAAfAQcAvwADAQwAzgD4APT/5ADuAPf/pwDyABIArwDVABQAmQD7ACsAwgD7AN3/zgDyAMT/6gD9AML//gDuAL//vQD8AK3/ygD2AJH/0ADYAI7/uAAAAXv/7AAYAcT/BgElAcD/GwEbAdP/MgEVAcv/AwFEAcL/+ABRAaj/+gBvAan/5gB8Abv/5wCaAbr/FAEZAe3/JwEPAQEALwHxAPz/RwHrAAAAGwETAR0AGAEwASUACAEyAT8AMwE+ASgAHQHgAPT/JgHEAO//OAHCANb/TAG0ANf/EAGuAPD/DgGhANf/9QC5APn/MQHQAMH/QwHRAKr/XgHdALL/cwHSAKr/NwHiAJP/HwHWAIX/EgHqAHL/JwG9AHX/XgHyAMH/dwH9AMr/hwHpANn/nwHmANX/cwEWAdz/jgEiAeX/jAE4Afj/gwEwARIAgAFAAScAhgFaASUAeAE2AT8AegHaAOv/hwHFAPv/lQGxAOn/rQGrAOz/cQG3AAwAfgGfACMAhgGmANb/kQGTAMP/qQGfALP/vQGRAK7/fAGJALD/aAF2AL7/TQF1AK//dAFbAMH/pwG5AKz/vQHGAJ7/1gHHAK//7AHBAKb/tgHiAJT/zgHvAIj/nwHhAIH/0wHQAMn/6QHRANv/9wG2AN3/DwK1AN3/4AHaAPf/3AH4APn/3QEAARcA1gEdARoAwAEmASUArwEVATAAvAFAAScA5wGgAN7/8wGGAOD/AwJ9AMf/EgJqAMj/3gFwAOb/0QFzAAEAuAFaAAQAogFqABwA/wGMALH/DAKFAJj/+wFzAIb/BQJnAHP/4QFxAIv/zwFgAHz/xQFuAGL/vgGFAGP/twFYAIz/ugE9AJr/vgE8ALb/uAEmAIz/wAEkAMP/ugENAJn/vwEMALT/wQH0/8D/xAFfAEz/tAFoADb/mAFmAD7/kQFUAE3/uQFXAB3/1QFTABX/2AFAAP7+1QFHAOf+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AP9h/q7+8f5s/pX+8f5f/oH+Hf9g/qj+Jv9H/rf+EP80/rT+5P6D/pj+1v6Q/oL+6P6k/nL+4P6s/l3+vf6e/oz+qv6L/pv+kf6b/qP+o/50/on+//6r/n3+D/+//nD+Lf+4/m7+Nv+l/nv+Df/a/n3+IP/c/pP+O//G/l3+WP/E/lz+ZP/K/nj+c/+6/oL+Y//Z/kj+gf/Z/kf+kf/J/jj+kv/r/lb+rP/Q/j3+rP/l/k/+jf8A/2j+wv/y/lr+o/8N/3L+vf8G/2v+XP/g/oP+ZP/o/p7+YP/S/rL+cv/K/sH+Vf8C/6b+YP8P/77+d/8f/73+U/8M/9f+gf8r/9T+Xf8Y/+3+c/8o/+z+R//I/rP+Qf+z/sb+Uv+a/sH+Wf+M/tT+I/+s/sX+Ev/D/s3+9v7A/sX+7f6q/r7+5/7V/sX+WP+U/qj+af99/qH+hf+B/qv+kv9u/rX+av94/oP+Uf9q/nf+VP9l/ln+Qf91/kr+SP+I/jj+Yv+N/jT+Nv+V/iv+j/+Z/qr+qv+f/rP+q/+d/tH+v/+T/tz+sv+7/qv+sv/A/o3+wv+r/n3+uP+d/mz+3P+q/oT+lv+l/t/+l/+k/v3+j/+J/gj/lf+D/h//hv+7/gn/lP/W/g3/q//a/vn+gP/t/gr/gP95/vn+d/9f/gT/iv9I/v3+iP8z/gn/W/9Z/vv+Rf9o/gr/Kf9j/v/+If9I/gL/CP8//v7+Av8m/gH/9f5Q/vf+nf9N/uv+r/84/uL+of8k/tD+iP8k/s3+sP8S/sT+pf/9/bP+oP/i/cD+kv/R/bb+tv/6/Zr+0P8F/p7+rP/f/dj+qv/G/ef+j//D/fX+g//X/fz+wf/D/fv+3P/I/e/+4f/C/dX+8//R/fr++//I/dD+BgDS/eb+hv+r/fr+a/+n/Qb/a/+0/SH/e/+u/TP/Zf+J/Qj/Sf+D/RT/Mv+M/Qf/R/92/Sz/Gf+H/RL/Lv9w/Tf/F/95/Sn//v50/TT/WP/H/SX/Vv/W/T7/Of/d/UT/MP/z/T7/aP/u/T//aP/9/Vr/af/r/XL/Vf/h/Xz/gf/m/Xv/Kf/K/U7/DP/M/VL/BP/f/Wn/7f7n/Wr/BP+v/Vn/HP+l/Wf/M/+w/Vf/F//l/Xr/EP/z/ZL/F/8R/pL/L/8Y/o//G//m/av/Ev/I/az/Ev/0/cT/9P7F/bL/A/8i/pb/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AP42//P+Av4f//z+Av48/9v+Bv5F/2H//f08/3v//f1S/4//C/5m/4z/D/4l/4T/D/4N/3D/Kf7+/nD/Nf75/oX/Mf71/lj/7P1Q/6T/6v1m/7b//P1f/87/8/1T/+L/zf1q/8D/uf1q/6n/uv18/5X/pP1a/6T/pv13/4T/mP1i/43/FP5q/83/Kf5i/+D/Q/5w/9j/Rv55/8H/Lv5E/9//Of46/8X/Rv4f/8j/Tv4S/67/Zv4U/6T/bP4J/43/ef4i/7D/Vv5y/+r/cP59/+P/gv5n/9b/fP5P/9n/fv6M//v/a/6P/xIAl/59/wMAlv5w/8f/qP5d/7r/tP5K/87/uf5R/+X/vv5r/6r/sf58/5T/z/59/7z/uv4x/8X/xf4d/9f/4/4f/9j/7/4v/8j/vv4B/8z/y/77/rT/8P4Q/+n/Df8S/+v/Gf8I/9H/LP8T/8f/F/8C/wQANf///gMAD/8Q/x0ADv/z/sb/F//o/q3/Fv/9/pf/Kf8A/4f/Bv/R/qT/Ef/C/oz/J/+v/pT/Qv+6/pP/Vv+z/qT/Uf+h/rf/bv+9/qH/AP8M/5b/+/4g/4H/Ef82/4T/Hf8+/2//3/4r/4P/yv4W/3n/rf4f/3//qP4t/5P/nP4X/2//Ff9A/5z/Kv9T/6H/Rv9I/5j/Vv9X/4z/K/9b/77/Df9s/8n/S/8v/5//Zf8j/5j/aP8i/3n/fv8m/2//Zv8G/6P/Uv8e/2v/Uv8d/07/WP85/0T/aP89/zL/N/8T/0T/Mf/1/kr/Pv/k/jT/Nv/I/jX/IP++/in/EP/P/h3/G/+l/ir/Sv9N/0//T/9p/0f/bf9w/0n/dv+D/zz/Pv98/1j/Sv+A/3L/e/9i/1r/mP9n/1//qv9V/0//wv9X/1D/nv9k/3z/lP97/43/p/+S/4//rP+h/3v/s/+W/6b/nf9D/z//rP8w/y7/u/8a/z3/zf8N/zH/s/8U/1X/vf/8/mT/tP/j/lb/nf/h/k7/s//8/oD/wv8N/5P/t/8l/53/3P8H/5v/xf81/6//6v8X/63/3/8u/7f/xv/P/lP/vv+0/kr/qv+p/l//rf+v/nb/2P+k/kv/7v+5/kn/4//S/lb/lv+Z/lb/g/+O/mn/kP98/n7/hP93/pP/bP9//lv/WP+S/k7/X/+p/kr/Qf+J/kj/qP9z/nj/tv9h/or/xP9w/qH/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","protEl":"AQAAAgAAAgIBAAACAAAAAQABAQEAAAIAAAAAAQAAAgABAAACAAAAAAEAAAAAAAEAAAIAAAAAAQAAAgEAAAIAAAACAQEAAAIAAAABAAACAAADAAEAAAIAAQAAAgAAAAABAAACAAAAAgIBAAACAAEAAAIAAAIBAQAAAgAAAAEAAQEBAAACAAIAAQAAAgAAAAAAAAACAQAAAgAAAAAAAAACAQAAAgAAAAIBAQAAAgAAAAABAQAAAgAAAAEAAAIAAgEAAAIAAAAAAQAAAgAAAgIBAAACAAAAAgIBAAACAAAAAgIBAAACAAADAAEAAAIAAAAAAQAAAgAAAAICAQAAAgAAAAEAAAIBAAACAAACAgEAAAIAAwEAAAIAAAABAAACAAIBAAACAAAAAQAAAgAAAAABAAACAAAAAQAAAgAAAgIBAAACAAACAgEAAAIAAgEAAAIAAgEAAAIAAQAAAgAAAAEAAAIAAAAAAQAAAgAAAAAAAAACAQAAAgAAAAABAAACAAEAAAIAAAABAAEBAQAAAgAAAAEAAAIAAgABAAACAAEAAAIAAAAAAQAAAgAAAAABAAAAAAABAAACAAAAAgIBAAACAAACAgEAAAIAAAAAAQEAAAIAAAIBAQAAAgEAAAIAAAACAQEAAAIAAAMAAQAAAgAAAwABAAACAAAAAAAAAAEAAAIAAAEAAAEBAAACAAEAAAIAAAEAAAEBAAACAAAAAAEAAAAAAAEAAAIAAAAAAAAAAQAAAgADAQAAAgABAAACAQAAAgACAAEAAAIAAAICAQAAAgACAAEAAAIAAAABAAACAAAAAAEAAAIBAAACAAEAAAIAAgABAAACAAIBAAACAAACAgEAAAIAAAABAAACAAAAAAEAAAIAAAACAgEAAAIAAAAAAQAAAgAAAAAAAAABAAACAAAAAAEAAAIAAAABAAACAQAAAgAAAAICAQAAAgADAQAAAgAAAAICAQAAAgAAAgEBAAACAAADAAEAAAIAAAACAQEAAAIAAAAAAQAAAgACAQAAAgAAAAAAAAACAQAAAgAAAAABAAACAAABAAABAQAAAgACAQAAAgAAAAABAQAAAgAAAAEAAAIAAAAAAQEAAAIAAAABAAACAAAAAAEAAAIAAAAAAAAAAgEAAAIAAAAAAQEAAAIAAQAAAgAAAAEAAAIAAgEAAAIAAQAAAgAAAgEBAAACAAAAAAEAAAAAAAEAAAIAAQAAAgAAAwABAAACAAAAAgIBAAACAQAAAgEAAAIAAQAAAgABAAACAQAAAgAAAAABAQAAAgACAAEAAAIAAAAAAAAAAgEAAAIAAAAAAAAAAQAAAgAAAAAAAAABAAACAAAAAgEBAAACAAAAAAEAAAIAAAAAAQAAAAAAAQAAAgAAAAAAAAACAQAAAgAAAgEBAAACAAAAAgEBAAACAAAAAgIBAAACAAAAAAAAAAIBAAACAAEAAAIAAAABAAEBAQAAAgAAAAAAAAABAAACAAAAAgIBAAACAAIBAAACAAAAAQAAAgAAAAEAAAIAAQAAAgACAAEAAAIAAAACAQEAAAIAAAABAAACAAIAAQAAAgABAAACAAACAgEAAAIAAAIBAQAAAgABAAACAAABAAABAQAAAgAAAAABAQAAAgAAAAAAAAABAAACAAMBAAACAAAAAAEAAAIAAgEAAAIAAwEAAAIAAAAAAQAAAgAAAAEAAQEBAAACAAAAAAEAAAIAAQAAAgAAAAICAQAAAgAAAAABAAACAAAAAQABAQEAAAIAAAACAQEAAAIAAAAAAQEAAAIAAAACAgEAAAIAAAMAAQAAAgAAAAEAAAIAAAAAAQEAAAIAAAABAAACAAAAAAEAAAIAAAACAgEAAAIAAAACAQEAAAIAAAAAAQAAAgAAAAICAQAAAgAAAAICAQAAAgAAAAEAAAIAAAICAQAAAgEAAAIAAAABAAEBAQAAAgAAAAEAAAIAAAAAAAAAAgEAAAIAAwEAAAIAAgEAAAIAAgEAAAIAAAAAAQAAAgACAAEAAAIAAAAAAQEAAAIAAAIBAQAAAgEAAAIAAAABAAACAAAAAQAAAgAAAAAAAAACAQAAAgAAAAEAAQEBAAACAAAAAAEAAAIBAAACAAACAgEAAAIAAgEAAAIAAAABAAACAAAAAAAAAAIBAAACAAAAAAEAAAIAAAABAAACAAAAAQAAAgAAAAICAQAAAgABAAACAAAAAAAAAAEAAAIAAgABAAACAAAAAAAAAAEAAAIAAAIBAQAAAgAAAAABAAACAAAAAAEBAAACAAAAAQAAAgABAAACAAIBAAACAAAAAQAAAgABAAACAAEAAAIAAQAAAgAAAAEAAAIAAAAAAQEAAAIAAQAAAgABAAACAAAAAQAAAgABAAACAAACAQEAAAIAAAACAgEAAAIAAgABAAACAAAAAAEAAAIAAAAAAAAAAgEAAAIAAAABAAACAAAAAgIBAAACAAABAAABAQAAAgAAAAAAAAACAQAAAgAAAAEAAQEBAAACAAAAAAEBAAACAAAAAAAAAAIBAAACAAIBAAACAAACAgEAAAIAAAAAAAAAAgEAAAIAAAAAAQAAAgAAAAABAQAAAgEAAAIAAgEAAAIAAAIBAQAAAgAAAAABAAACAAACAgEAAAIAAQAAAgAAAAEAAAIAAAACAgEAAAIAAAABAAACAAAAAAAAAAIBAAACAAAAAQABAQEAAAIAAAAAAQAAAgEAAAIAAAABAAEBAQAAAgAAAAABAAACAAAAAAEBAAACAAAAAgIBAAACAAAAAAEAAAIAAAEAAAEBAAACAAMBAAACAQAAAgAAAAABAQAAAgABAAACAAEAAAIBAAACAAEAAAIAAAABAAACAAACAQEAAAIAAAACAgEAAAIAAQAAAgAAAgIBAAACAAAAAAEAAAIAAAAAAQEAAAIAAAAAAQAAAgAAAAEAAQEBAAACAAAAAAEAAAIAAAAAAAAAAgEAAAIAAAAAAQEAAAIAAAAAAAAAAQAAAgAAAAAAAAACAQAAAgAAAAEAAQEBAAACAAAAAQAAAgAAAAICAQAAAgAAAgEBAAACAAIAAQAAAgAAAQAAAQEAAAIAAAABAAEBAQAAAgACAQAAAgAAAAAAAAACAQAAAgAAAgEBAAACAQAAAgACAQAAAgAAAAAAAAACAQAAAgAAAQAAAQEAAAIAAgABAAACAAACAgEAAAIAAAAAAQAAAgAAAgEBAAACAAADAAEAAAIAAAAAAQAAAgAAAAAAAAACAQAAAgAAAAABAAAAAAABAAACAAIBAAACAAACAgEAAAIAAAACAgEAAAIAAAACAgEAAAIAAQAAAgAAAAEAAAIAAAABAAACAAACAQEAAAIAAAAAAAAAAQAAAgACAQAAAgAAAgIBAAACAAAAAQAAAgAAAAIBAQAAAgEAAAIAAAABAAEBAQAAAgADAQAAAgACAAEAAAIAAAABAAACAAAAAgIBAAACAAAAAAAAAAIBAAACAQAAAgAAAAICAQAAAgAAAgIBAAACAAAAAAEAAAIAAQAAAgAAAAICAQAAAgACAQAAAgAAAAABAAACAAEAAAIAAAICAQAAAgAAAAAAAAACAQAAAgACAQAAAgABAAACAQAAAgEAAAIAAAABAAACAAACAgEAAAIAAAABAAEBAQAAAgAAAAAAAAABAAACAAAAAAAAAAIBAAACAAAAAAAAAAEAAAIAAAAAAQAAAgAAAAICAQAAAgABAAACAAAAAAAAAAIBAAACAAACAQEAAAIAAgEAAAIAAAAAAQEAAAIAAgABAAACAAAAAAEBAAACAAACAQEAAAIAAAAAAAAAAQAAAgAAAAICAQAAAgAAAgIBAAACAAAAAQAAAgAAAAEAAAIAAAIBAQAAAgAAAQAAAQEAAAIAAQAAAgAAAAEAAQEBAAACAAIBAAACAAAAAQAAAgEAAAIAAQAAAgABAAACAAEAAAIAAAAAAQAAAgAAAAEAAAIAAAAAAQEAAAIAAAAAAQAAAgAAAAEAAQEBAAACAAIAAQAAAgAAAAABAAACAAACAgEAAAIAAAABAAACAAAAAAAAAAEAAAIAAgEAAAIBAAACAAMBAAACAQAAAgEAAAIAAAAAAQAAAgACAQAAAgAAAAICAQAAAgEAAAIAAAAAAAAAAQAAAgAAAQAAAQEAAAIAAAACAQEAAAIAAQAAAgEAAAIAAAAAAQAAAgACAQAAAgAAAAICAQAAAgACAAEAAAIAAAAAAQAAAgAAAAABAAAAAAABAAACAAEAAAIAAAAAAQAAAgAAAAICAQAAAgAAAwABAAACAAAAAAEAAAAAAAEAAAIAAAICAQAAAgAAAAEAAAIAAQAAAgABAAACAAAAAgEBAAACAAEAAAIAAAAAAAAAAQAAAgAAAAEAAQEBAAACAAAAAAEAAAIAAAIBAQAAAgAAAgEBAAACAAAAAQAAAgEAAAIAAgABAAACAAIAAQAAAgAAAAEAAAIAAAAAAAAAAQAAAgACAAEAAAIAAAACAgEAAAIAAAICAQAAAgADAQAAAgAAAgEBAAACAAAAAQAAAgAAAAABAAACAAAAAAEAAAIAAAAAAQEAAAIAAAAAAQAAAgAAAAEAAAIAAAMAAQAAAgABAAACAQAAAgAAAAICAQAAAgAAAAEAAAIAAgABAAACAAACAQEAAAIAAgEAAAIAAAAAAQAAAgEAAAIAAAACAQEAAAIAAAABAAEBAQAAAgAAAAABAAACAAAAAQAAAgAAAAIBAQAAAgAAAAABAQAAAgEAAAIAAAICAQAAAgAAAAEAAAIAAAACAgEAAAIAAAMAAQAAAgAAAAABAAACAAMBAAACAQAAAgEAAAIAAAABAAACAAAAAQAAAgADAQAAAgAAAAIBAQAAAgEAAAIAAAAAAAAAAQAAAgACAQAAAgEAAAIAAAMAAQAAAgAAAgEBAAACAAAAAQABAQEAAAIAAAAAAAAAAQAAAgAAAgEBAAACAAIBAAACAAAAAQABAQEAAAIAAQAAAgAAAAAAAAACAQAAAgACAQAAAgAAAAABAQAAAgAAAAAAAAABAAACAAAAAAEBAAACAAACAQEAAAIAAgEAAAIAAAAAAQAAAgAAAAEAAAIAAAABAAACAAIBAAACAAAAAAAAAAEAAAIAAAAAAQAAAgACAQAAAgAAAAAAAAACAQAAAgADAQAAAgAAAgIBAAACAAAAAAAAAAIBAAACAAAAAAAAAAIBAAACAAAAAQABAQEAAAIAAAABAAACAAAAAQABAQEAAAIAAAAAAAAAAQAAAgAAAAAAAAABAAACAAAAAAEAAAIAAAAAAQAAAgAAAAICAQAAAgAAAgEBAAACAAAAAQAAAgAAAAEAAQEBAAACAAACAQEAAAIAAAAAAAAAAQAAAgAAAAEAAAIAAgEAAAIAAAAAAAAAAgEAAAIAAAABAAEBAQAAAgAAAAEAAQEBAAACAAIBAAACAAADAAEAAAIAAAABAAACAAAAAAEAAAIAAAAAAQEAAAIAAAAAAQAAAgACAAEAAAIAAAAAAQAAAgAAAAEAAQEBAAACAAMBAAACAAAAAAEAAAIAAAABAAACAAAAAQABAQEAAAIAAAMAAQAAAgEAAAIAAAAAAAAAAgEAAAIAAAACAQEAAAIAAwEAAAIAAgABAAACAAAAAAAAAAEAAAIBAAACAAAAAQAAAgAAAAABAAACAAAAAgEBAAACAAEAAAIBAAACAAAAAgEBAAACAAAAAAAAAAIBAAACAQAAAgAAAAEAAAIAAQAAAgAAAAIBAQAAAgACAAEAAAIAAAABAAEBAQAAAgAAAAEAAQEBAAACAAAAAQABAQEAAAIAAQAAAgAAAAABAAACAAAAAAEAAAIAAAAAAQAAAgABAAACAAEAAAIAAQAAAgAAAAEAAAIBAAACAAAAAgIBAAACAAAAAAEBAAACAAAAAAEAAAIAAAABAAACAAAAAAEAAAIAAAAAAAAAAQAAAgAAAAEAAAIAAAACAgEAAAIAAAABAAACAAAAAAEAAAIAAAEAAAEBAAACAAAAAQAAAgAAAAAAAAABAAACAAEAAAIAAAABAAACAAAAAQABAQEAAAIAAQAAAgADAQAAAgAAAAIBAQAAAgAAAAABAAACAAIBAAACAAAAAQAAAgAAAAEAAAIAAAABAAACAAACAgEAAAIAAAICAQAAAgAAAAABAQAAAgAAAAABAQAAAgAAAAAAAAABAAACAAAAAQAAAgACAQAAAgAAAgEBAAACAAAAAAEAAAIAAgABAAACAAAAAQABAQEAAAIAAAAAAQAAAgACAQAAAgACAQAAAgEAAAIAAAABAAACAAAAAAAAAAEAAAIAAAABAAEBAQAAAgACAAEAAAIAAAAAAQAAAgACAAEAAAIAAAABAAACAAAAAQABAQEAAAIAAAICAQAAAgACAAEAAAIAAAMAAQAAAgACAQAAAgAAAgIBAAACAAAAAAEAAAIAAAABAAACAAAAAgIBAAACAAAAAAEAAAIAAAACAQEAAAIAAAIBAQAAAgEAAAIAAQAAAgACAQAAAgAAAgEBAAACAAIBAAACAAAAAgIBAAACAAAAAAEAAAIAAAABAAACAAAAAAAAAAIBAAACAAACAQEAAAIBAAACAAAAAgIBAAACAAAAAQAAAgAAAAABAAACAAIBAAACAAAAAAEAAAAAAAEAAAIAAAAAAAAAAQAAAgAAAAIBAQAAAgAAAAEAAQEBAAACAAAAAgEBAAACAAAAAAEAAAIAAAABAAEBAQAAAgEAAAIAAgEAAAIAAAEAAAEBAAACAAAAAAAAAAIBAAACAAAAAgEBAAACAAAAAQAAAgAAAAABAAACAAAAAAEAAAIAAAABAAEBAQAAAgAAAgIBAAACAAABAAABAQAAAgAAAAABAAACAAMBAAACAAAAAAEBAAACAAACAgEAAAIAAAMAAQAAAgACAQAAAgAAAAEAAAIAAAAAAQAAAgAAAAEAAAIAAQAAAgABAAACAAAAAQABAQEAAAIAAAMAAQAAAgAAAAEAAQEBAAACAAABAAABAQAAAgAAAAABAAACAAAAAQAAAgAAAAABAAACAAAAAAAAAAEAAAIAAAABAAACAQAAAgACAQAAAgAAAgIBAAACAAAAAAEAAAAAAAEAAAIAAAABAAEBAQAAAgAAAgIBAAACAAAAAAEAAAIAAAABAAACAAACAQEAAAIAAAAAAQAAAgAAAAIBAQAAAgAAAAEAAAIAAAABAAEBAQAAAgAAAAABAAACAQAAAgABAAACAQAAAgABAAACAAAAAAEAAAIAAQAAAgAAAQAAAQEAAAIAAAAAAQEAAAIAAAAAAQAAAgAAAAIBAQAAAgAAAAAAAAACAQAAAgACAAEAAAIAAAAAAAAAAQAAAgAAAQAAAQEAAAIAAAICAQAAAgAAAAEAAAIAAAAAAQEAAAIAAAIBAQAAAgEAAAIAAAAAAAAAAgEAAAIAAgEAAAIAAgEAAAIAAgABAAACAQAAAgABAAACAAAAAAEAAAIAAAABAAEBAQAAAgEAAAIAAAABAAACAAMBAAACAAIBAAACAAMBAAACAAEAAAIAAAACAgEAAAIBAAACAAAAAAEBAAACAAEAAAIAAwEAAAIAAAICAQAAAgAAAAEAAAIAAAACAgEAAAIAAgEAAAIAAAABAAEBAQAAAgAAAAIBAQAAAgAAAAAAAAABAAACAAEAAAIAAgABAAACAAAAAAEAAAIAAAAAAQAAAgAAAAEAAAIAAAAAAQAAAAAAAQAAAgADAQAAAgAAAAABAAACAAAAAQAAAgAAAQAAAQEAAAIAAgABAAACAQAAAgAAAgEBAAACAAAAAQABAQEAAAIAAAEAAAEBAAACAAACAQEAAAIAAAEAAAEBAAACAAAAAAEAAAAAAAEAAAIAAQAAAgEAAAIAAAAAAQAAAgAAAAAAAAACAQAAAgEAAAIAAAABAAEBAQAAAgAAAAABAAACAAAAAgIBAAACAAAAAAEAAAAAAAEAAAIAAAICAQAAAgEAAAIAAAAAAAAAAQAAAgAAAAAAAAABAAACAAIBAAACAAIAAQAAAgACAAEAAAIAAAABAAACAAIAAQAAAgAAAgEBAAACAAAAAQAAAgAAAAICAQAAAgAAAAEAAAIAAAMAAQAAAgEAAAIAAAAAAQEAAAIAAAACAQEAAAIBAAACAAAAAQABAQEAAAIAAAABAAACAAAAAAEAAAIAAAEAAAEBAAACAAAAAQAAAgAAAAICAQAAAgAAAAIBAQAAAgAAAQAAAQEAAAIAAAABAAEBAQAAAgAAAAEAAAIAAAABAAACAAIBAAACAAAAAQAAAgAAAAEAAQEBAAACAAAAAgIBAAACAAMBAAACAAEAAAIAAAABAAEBAQAAAgACAQAAAgAAAAIBAQAAAgEAAAIAAAAAAAAAAQAAAgAAAAEAAAIAAAICAQAAAgACAQAAAgAAAAAAAAACAQAAAgAAAAEAAQEBAAACAAAAAAAAAAEAAAIAAAAAAAAAAQAAAgEAAAIAAAIBAQAAAgAAAAABAAACAAAAAAEAAAIAAAICAQAAAgAAAAEAAQEBAAACAAABAAABAQAAAgAAAAEAAQEBAAACAAAAAgEBAAACAAAAAQAAAgEAAAIAAAIBAQAAAgABAAACAAAAAQAAAgAAAAEAAAIAAAABAAACAAAAAQAAAgAAAAABAAACAAEAAAIAAAAAAQEAAAIAAQAAAgAAAAABAAACAQAAAgAAAAABAAACAAAAAgIBAAACAAAAAAEAAAIAAAAAAQEAAAIAAAAAAQAAAgADAQAAAgAAAAABAAACAAAAAAEAAAIA","dnaXYZ":"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","dnaEl":"AgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQABAAABAQABAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAEAAQAAAAACAQAAAAACAgACBAICBAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAIBAAIAAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAEBAAEABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICBAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQACAQACAAAABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAQEAAQAEAgICAAACAAIAAAEAAgEAAgAAAAIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAABAQABAAQCAgIAAAIAAgAAAQACAQACAAAAAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAEBAAEABAICAgAAAgACAAABAAIBAAIAAAACAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAQEAAQAEAgICAAACAAIAAAEAAgEAAgAAAAIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAABAQABAAQCAgIAAAIAAgAAAQACAQACAAAAAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAEBAAEABAICAgAAAgACAAABAAIBAAIAAAACAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQACAAAABAICAgAAAgACAAABAAEAAAEBAAEABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAgEAAQAAAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAIAAAAEAgICAAACAAIAAAEAAQAAAQEAAQAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQACAQABAAACAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAgAAAAQCAgIAAAIAAgAAAQABAAABAQABAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAIBAAEAAAIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQACAAAABAICAgAAAgACAAABAAEAAAEBAAEABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAgEAAQAAAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQABAAAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAIAAAAEAgICAAACAAIAAAEAAQAAAQEAAQAEAgICAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQACAQABAAACAAACAAIAAAEAAQAAAgEAAQEABAICAgAAAgACAAABAAIBAAEAAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAgAAAAQCAgIAAAIAAgAAAQABAAABAQABAAQCAgIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAIBAAEAAAIAAAIAAgAAAQABAAACAQABAQAEAgICAAACAAIAAAEAAgEAAQAABAICAgAAAgACAAABAAEAAAIBAAEBAAQCAgIAAAIAAgAAAQACAQACAAAABAICAgAAAgACAAABAAEAAAEBAAEA","dnaCat":"AQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAAAwMDAwMDAwMDAwIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgYGBgYGBwYGBgAAAAABAQABAgEBAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAEBAQEBAQEBAQCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAADAwMDAwMDAwMDAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABAQEBAQEBAQEAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAMDAwMDAwMDAwMCAQEBAAABAAEAAAQEBAQEBAQEBAEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAAAwMDAwMDAwMDAwIBAQEAAAEAAQAABAQEBAQEBAQEAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAADAwMDAwMDAwMDAgEBAQAAAQABAAAEBAQEBAQEBAQBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAMDAwMDAwMDAwMCAQEBAAABAAEAAAQEBAQEBAQEBAEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAAAwMDAwMDAwMDAwIBAQEAAAEAAQAABAQEBAQEBAQEAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAADAwMDAwMDAwMDAgEBAQAAAQABAAAEBAQEBAQEBAQBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABAQEBAQEBAQEAgEBAQAAAQABAAADAwMDAwMDAwMDAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAYGBgYGBgYGAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAEBAQEBAQEBAQCAQEBAAABAAEAAAMDAwMDAwMDAwMCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABgYGBgYGBgYBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAQEBAQEBAQEBAIBAQEAAAEAAQAAAwMDAwMDAwMDAwIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAGBgYGBgYGBgEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABAQEBAQEBAQEAgEBAQAAAQABAAADAwMDAwMDAwMDAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAYGBgYGBgYGAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABgYGBgYGBgYCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAEBAQEBAQEBAQCAQEBAAABAAEAAAMDAwMDAwMDAwMCAQEBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABgYGBgYGBgYBAAABAAEAAAUFBQUFBQUFBQUFAgEBAQAAAQABAAAGBgYGBgYGBgIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAQEBAQEBAQEBAIBAQEAAAEAAQAAAwMDAwMDAwMDAwIBAQEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAGBgYGBgYGBgEAAAEAAQAABQUFBQUFBQUFBQUCAQEBAAABAAEAAAYGBgYGBgYGAgEBAQAAAQABAAAFBQUFBQUFBQUFBQIBAQEAAAEAAQAABAQEBAQEBAQEAgEBAQAAAQABAAADAwMDAwMDAwMD","sugar":{"C1'":[-2.904,0.091,-0.079],"C2'":[-3.541,0.258,1.263],"C3'":[-4.412,1.349,1.164],"C4'":[-4.5,1.616,-0.286],"O4'":[-3.331,1.152,-0.864],"C5'":[-4.608,3.059,-0.573],"O3'":[-5.699,1.009,1.63],"O5'":[-4.653,3.336,-1.942]},"p3":[-6.222,1.55,3.053],"me":[-18.772,9.449,4.591],"ends":[[-48.12,-64.12,72.38],[20.89,75.55,-65.01]],"protCen":[2.76,2.19,-14.53]};
+        const i16 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
+        const u8 = (b) => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+        const pts = (b) => { const a = i16(b), out = []; for (let i = 0; i < a.length; i += 3) out.push(V(a[i] / 20, a[i + 1] / 20, a[i + 2] / 20)); return out; };
+        const vv = (a) => V(a[0], a[1], a[2]);
+        const ends = D.ends.map(vv);
+    // ---- DNA arms: grow each end by repeating its own 4-bp screw step, then bend both arms into gentle waves.
+    //      Bonds (for ball-and-stick) are found on the unbent coordinates, so bending never breaks or adds a bond.
+    function buildDNA(dna, el, cat, EXT, opt) {
+        const P = dna.map(p => p.slice()), E = el.slice(), C = cat.slice(), arms = [];
+        const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
+        const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        ['L', 'R'].forEach(k => {
+            const X = EXT[k], R = X.R, t = X.t, idx = [];
+            for (let i = X.lo; i <= X.hi; i++) idx.push(i);
+            let unit = []; for (let i = X.hi - 160; i <= X.hi; i++) unit.push(i);
+            for (let n = 0; n < opt.units; n++) {
+                const nu = [];
+                for (const i of unit) {
+                    const p = P[i];
+                    P.push([R[0] * p[0] + R[1] * p[1] + R[2] * p[2] + t[0], R[3] * p[0] + R[4] * p[1] + R[5] * p[2] + t[1], R[6] * p[0] + R[7] * p[1] + R[8] * p[2] + t[2]]);
+                    E.push(E[i]); C.push(C[i] === 7 ? 0 : C[i]); nu.push(P.length - 1); idx.push(P.length - 1);
+                }
+                unit = nu;
+            }
+            arms.push(idx);
+        });
+        const straight = P.map(p => p.slice());
+        // bonds from the straight geometry
+        const bonds = [], HB = 2.2, hash = new Map(), key = (x, y, z) => x + ',' + y + ',' + z;
+        straight.forEach((p, i) => { const kk = key(Math.floor(p[0] / HB), Math.floor(p[1] / HB), Math.floor(p[2] / HB)); if (!hash.has(kk)) hash.set(kk, []); hash.get(kk).push(i); });
+        straight.forEach((p, i) => {
+            const cx = Math.floor(p[0] / HB), cy = Math.floor(p[1] / HB), cz = Math.floor(p[2] / HB);
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+                const l = hash.get(key(cx + a, cy + b, cz + c)); if (!l) continue;
+                for (const j of l) { if (j <= i) continue;
+                    const q = straight[j], d2 = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2;
+                    const cut = (E[i] === 4 || E[j] === 4) ? 1.9 : 1.75;
+                    if (d2 < cut * cut && d2 > 0.8) bonds.push(i, j); }
+            }
+        });
+        arms.forEach((idx, si) => {
+            const cen = (ids) => { const c = [0, 0, 0]; ids.forEach(i => { c[0] += P[i][0]; c[1] += P[i][1]; c[2] += P[i][2]; }); return c.map(v => v / ids.length); };
+            const p0 = cen(idx.slice(0, 362)), pf = cen(idx.slice(idx.length - 362));
+            const u = nrm([pf[0] - p0[0], pf[1] - p0[1], pf[2] - p0[2]]);
+            const n1 = nrm(cross(cross(u, opt.up), u)), n2 = cross(u, n1);
+            const sb = opt.start[si], step = 0.5, N = Math.ceil(opt.len / step), W = opt.waves[si];
+            const Cs = [[0, 0, 0]], Ts = [u];
+            for (let j = 1; j <= N; j++) {            // centre line: integrate a tangent that tilts back and forth (arc length is preserved)
+                const sg = j * step - sb; let g1 = 0, g2 = 0;
+                if (sg > 0) { const x = Math.min(1, sg / opt.ramp), r = x * x * (3 - 2 * x);
+                    g1 = r * W[0] * Math.sin(2 * Math.PI * sg / W[1] + W[2]); g2 = r * W[3] * Math.sin(2 * Math.PI * sg / W[4] + W[5]); }
+                const T = nrm([u[0] + n1[0] * g1 + n2[0] * g2, u[1] + n1[1] * g1 + n2[1] * g2, u[2] + n1[2] * g1 + n2[2] * g2]);
+                const c = Cs[j - 1]; Cs.push([c[0] + T[0] * step, c[1] + T[1] * step, c[2] + T[2] * step]); Ts.push(T);
+            }
+            for (const i of idx) {
+                const q = [P[i][0] - p0[0], P[i][1] - p0[1], P[i][2] - p0[2]], sg = dot(q, u);
+                if (sg <= sb) continue;
+                const j = Math.min(N, Math.round(sg / step)), T = Ts[j];
+                const off = [q[0] - u[0] * sg, q[1] - u[1] * sg, q[2] - u[2] * sg];
+                const ax = cross(u, T), sn = Math.hypot(ax[0], ax[1], ax[2]), cs = dot(u, T);
+                let r = off;
+                if (sn > 1e-6) { const a = ax.map(v => v / sn), kx = cross(a, off), kd = dot(a, off); r = [0, 1, 2].map(m => off[m] * cs + kx[m] * sn + a[m] * kd * (1 - cs)); }
+                const c = Cs[j], extra = sg - j * step;
+                P[i] = [p0[0] + c[0] + T[0] * extra + r[0], p0[1] + c[1] + T[1] * extra + r[1], p0[2] + c[2] + T[2] * extra + r[2]];
+            }
+        });
+        return { P, E, C, bonds };
+    }
+        // screw step of the last 4 bp (161 atoms) of each arm, fitted to the model (x' = R·x + t)
+        const EXT = {"L":{"R":[-0.74891,0.355476,-0.559259,0.662254,0.431459,-0.612587,0.023537,-0.829144,-0.558539],"t":[-16.7854,20.6402,58.9027],"lo":472,"hi":1519},"R":{"R":[-0.203844,0.978846,-0.017534,0.290288,0.043328,-0.955958,-0.934976,-0.199956,-0.292979],"t":[-40.0631,9.6418,-57.4296],"lo":1520,"hi":2567}};
+        const arm = buildDNA(pts(D.dnaXYZ).map(v => [v.x, v.y, v.z]), Array.from(u8(D.dnaEl)), Array.from(u8(D.dnaCat)), EXT,
+            { units: 28, up: [0, 1, 0], start: [15, 22], ramp: 25, len: 520,
+              waves: [[0.65, 140, 0, 0.35, 190, 1.2], [0.65, 140, 3.14, 0.35, 190, 0]] });   // [tilt, wavelength (Å), phase] × 2 planes
+        return { prot: pts(D.protXYZ), protEl: u8(D.protEl), dna: arm.P.map(p => V(p[0], p[1], p[2])), dnaEl: arm.E, dnaCat: arm.C, dnaBonds: arm.bonds,
+                 sugar: Object.fromEntries(Object.entries(D.sugar).map(([k, v]) => [k, vv(v)])), p3: vv(D.p3), me: vv(D.me),
+                 protCen: vv(D.protCen), ends, axis: ends[1].clone().sub(ends[0]).normalize() };
+    })();
+    const DZ = -15.5;                                   // DNA helix axis: along x, at y = 0, z = DZ (behind the active site)
+    const FRONT_DIR = V(-0.35, 0.34, 0.87).normalize();
+    const OPEN_DIR = FRONT_DIR.clone();               // the open cleft above the active site faces the front view
+    const VIEWS = {
+        front:    { target: V(0.29, -0.455, 0.968), dir: V(0.9279, 0.3552, -0.1138).normalize(), dist: 15.9 },   // active-site close-up (matched to the reference screenshot)
+        side:     { target: V(0.1, -0.5, 0.9), dir: V(0.15, 0.1, 0.98).normalize(), dist: 19 },
+        gap: (() => {      // side-on to both the helix and the flipped base: shows the base swung out of the gap in the double helix
+            const near = CRY.dna.filter(p => p.length() < 22), dc = near.reduce((a, p) => a.add(p), V(0, 0, 0)).multiplyScalar(1 / near.length);
+            const flip = perpPart(dc.clone().negate(), CRY.axis).normalize();
+            const d = new THREE.Vector3().crossVectors(CRY.axis, flip).normalize(); if (d.dot(FRONT_DIR) < 0) d.negate();
+            return { target: dc.clone().multiplyScalar(0.55), dir: d.addScaledVector(flip, 0.35).normalize(), dist: 58 };
+        })(),
+        // starting view, matched to the reference screenshot: from above and to the side, both DNA arms crossing the frame diagonally
+        overview: { target: V(-4.28, -1.93, -9.43), dir: V(0.8372, 0.5036, 0.2132).normalize(),
+                    get dist() { return window.innerWidth < window.innerHeight ? 290 : 245; } }   // starting view, zoomed out
+    };
+    const R6 = 1.39, T54 = 54.7;
+    const rad = (a) => V(Math.cos(a * deg), 0, Math.sin(a * deg));
+    const tilt = (a, t) => rad(a).multiplyScalar(Math.cos(t * deg)).addScaledVector(UP, Math.sin(t * deg));   // t > 0 tilts up
+    const ANG = { N1: 180, C2: 240, N3: 300, C4: 0, C5: 60, C6: 120 };
+    const RING0 = {}; for (const k in ANG) RING0[k] = rad(ANG[k]).multiplyScalar(R6);
+    const rad30 = rad(ANG.N3);   // radial direction at N3
+    const gluDir = tilt(ANG.N3, -22);   // Glu1266's O–H approaches N3 from slightly below the ring plane
+    const sDir = tilt(ANG.C6, T54);          // C6 → S of Cys1226 once bonded (C6 sp³)
+    const h5Sp3 = tilt(ANG.C5, T54);         // C5–H in the methylated intermediate (points up)
+    const mSp3 = tilt(ANG.C5, -T54);         // C5–CH₃ in the methylated intermediate (points down, toward SAM)
+
+    const SUB_EL = { N1: 'N', C2: 'C', O2: 'O', N3: 'N', C4: 'C', N4: 'N', H41: 'H', H42: 'H', C5: 'C', C6: 'C', H6: 'H',
+                     C1p: 'C', C2p: 'C', C3p: 'C', C4p: 'C', O4p: 'O', C5p: 'C', O3p: 'O' };
+    const SUB_KEYS = Object.keys(SUB_EL);
+    function subGeom(c) {            // c.c6 = how far C6 has gone sp² → sp³ (Cys bonded)
+        const g = {};
+        for (const k in RING0) g[k] = RING0[k].clone();
+        g.O2 = g.C2.clone().addScaledVector(rad(ANG.C2), 1.23);
+        g.N4 = g.C4.clone().addScaledVector(rad(ANG.C4), 1.34);
+        g.H41 = g.N4.clone().addScaledVector(rad(ANG.C4 - 60), 1.01);
+        g.H42 = g.N4.clone().addScaledVector(rad(ANG.C4 + 60), 1.01);
+        g.H6 = g.C6.clone().addScaledVector(tilt(ANG.C6, -T54 * (c.c6 || 0)), 1.08);
+        // deoxyribose: a pentagon hanging back from N1, toward the DNA backbone
+        g.C1p = g.N1.clone().addScaledVector(rad(ANG.N1), 1.47);
+        const e1 = rad(ANG.N1), e2 = perpPart(V(0, 0.3, -1), e1).normalize();
+        const dc = e1.clone().multiplyScalar(0.8).addScaledVector(e2, 0.6).normalize(), R5 = 1.24;
+        const cen = g.C1p.clone().addScaledVector(dc, R5), u0 = dc.clone().negate(), w = perpPart(e2, u0).normalize();
+        const pv = (k) => cen.clone().addScaledVector(u0, R5 * Math.cos(72 * k * deg)).addScaledVector(w, R5 * Math.sin(72 * k * deg));
+        g.C2p = pv(1); g.C3p = pv(2); g.C4p = pv(3); g.O4p = pv(4);
+        g.C5p = g.C4p.clone().addScaledVector(g.C4p.clone().sub(cen).normalize(), 1.51);
+        g.O3p = g.C3p.clone().addScaledVector(g.C3p.clone().sub(cen).normalize(), 1.43);
+        const cs = CRY.sugar;                                 // use the crystal's deoxyribose (the ring itself was superposed on the crystal's)
+        [['C1p', "C1'"], ['C2p', "C2'"], ['C3p', "C3'"], ['C4p', "C4'"], ['O4p', "O4'"], ['C5p', "C5'"], ['O3p', "O3'"]].forEach(([a, b]) => g[a] = cs[b].clone());
+        return g;
+    }
+    const G0 = subGeom({ c6: 0 });
+
+    // =====================================================================
+    //  Renderers: a blurred back layer (cytosol molecules behind the enzyme) and the sharp main layer
+    // =====================================================================
+    const wrapEl = document.getElementById('canvas-wrap');
+    const DPR = Math.min(window.devicePixelRatio || 1, WP.dpr);
+    function mkRenderer(cls) {
+        const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        r.setPixelRatio(DPR); r.setSize(window.innerWidth, window.innerHeight); r.setClearColor(0x000000, 0);
+        if (cls) r.domElement.className = cls;
+        wrapEl.appendChild(r.domElement); return r;
+    }
+    const farRenderer = mkRenderer('far-layer');
+    const renderer = mkRenderer();
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0c3550, 80, 200);
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.copy(VIEWS.overview.target).addScaledVector(VIEWS.overview.dir, VIEWS.overview.dist);
+    scene.add(camera);
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.09; controls.enablePan = false;
+    controls.rotateSpeed = 0.7; controls.minDistance = 6; controls.maxDistance = 320;
+    controls.target.copy(VIEWS.overview.target);
+    const world = new THREE.Group(); scene.add(world);     // every molecule lives here; auto-rotate turns this group
+    // Starting view. To change it: set up the view you want, press Shift+V (copies the view), and paste it here.
+    const START_VIEW = null;
+    function applyView(v) {
+        camera.position.fromArray(v.cam); controls.target.fromArray(v.tgt);
+        world.quaternion.fromArray(v.wq); world.position.fromArray(v.wp);
+        camera.lookAt(controls.target);
+    }
+    if (START_VIEW) applyView(START_VIEW);
+
+    // =====================================================================
+    //  Cartoon shading + ink outlines
+    // =====================================================================
+    const TOON = {
+        hi: { value: 0.95 }, shade: { value: -0.22 },
+        flexT: { value: 0 }, flexAmp: { value: 0.9 },      // protein breathing: time and size (Å) of the slow, smooth flexing
+        px: { value: 3.2 * DPR }, world: { value: 0.22 }, push: { value: 1.2 },      // molecule silhouette
+        protPx: { value: 4.8 * DPR }, zero: { value: 0 },
+        res: { value: new THREE.Vector2() }
+    };
+    const updateRes = () => renderer.getDrawingBufferSize(TOON.res.value);
+    updateRes();
+    const SPLIT = { uSplit: { value: 0 }, uSide: { value: -1 } };   // depth split for the blurred back layer
+
+    const SPLIT_GLSL = `
+    #ifdef SPLIT
+        { vec4 cV = modelViewMatrix * im * vec4(0.0, 0.0, 0.0, 1.0); if ((-cV.z - uSplit) * uSide < 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } }
+    #endif`;
+    // A smooth, slowly changing displacement field (a few long waves, ~70 Å) that makes the protein's domains
+    // breathe and shift by about an ångström. The middle, around the active site, stays nearly still.
+    const FLEX_GLSL = `
+    uniform float uFlexT; uniform float uFlexAmp;
+    vec3 flexField(vec3 p) {
+        float t = uFlexT;
+        vec3 d = vec3(
+            sin(dot(p, vec3(0.071, 0.043, -0.052)) + t * 0.9)       + 0.6 * sin(dot(p, vec3(-0.038, 0.081, 0.029)) + t * 1.3),
+            sin(dot(p, vec3(-0.049, 0.066, 0.058)) + t * 1.1 + 1.7) + 0.6 * sin(dot(p, vec3(0.083, -0.027, 0.044)) + t * 0.7),
+            sin(dot(p, vec3(0.058, -0.061, 0.047)) + t * 0.8 + 3.1) + 0.6 * sin(dot(p, vec3(0.031, 0.075, -0.066)) + t * 1.2));
+        return d * uFlexAmp * smoothstep(8.0, 30.0, length(p));
+    }`;
+    const TOON_VS = `
+    #ifdef SPLIT
+    uniform float uSplit; uniform float uSide;
+    #endif
+    varying vec3 vN; varying vec3 vP;
+    #ifdef FLEX
+    ${FLEX_GLSL}
+    #endif
+    #include <fog_pars_vertex>
+    void main() {
+        mat4 im = mat4(1.0);
+    #ifdef USE_INSTANCING
+        im = instanceMatrix;
+    #endif
+        if (length(im[0].xyz) < 1e-5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        ${SPLIT_GLSL}
+        vec4 lp = im * vec4(position, 1.0);
+    #ifdef FLEX
+        lp.xyz += flexField(lp.xyz);
+    #endif
+        vec4 mvPosition = modelViewMatrix * lp;
+        vN = normalize(normalMatrix * (mat3(im) * normal));
+        vP = mvPosition.xyz;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+    }`;
+    const TOON_FS = `
+    uniform vec3 uColor; uniform float uOpacity; uniform float uHi; uniform float uRim; uniform float uShade;
+    varying vec3 vN; varying vec3 vP;
+    #include <fog_pars_fragment>
+    void main() {
+        vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
+        vec3 V = normalize(-vP); vec3 L = normalize(vec3(-0.55, 0.62, 0.56));
+        float d = dot(N, L);
+        vec3 c = mix(uColor * 0.58, uColor, smoothstep(uShade - 0.03, uShade + 0.03, d));   // shadow band on the side away from the light
+        float s = dot(N, normalize(L + V));
+        c = mix(c, mix(uColor, vec3(1.0), 0.6), smoothstep(uHi - 0.006, uHi + 0.006, s));
+        float rim = uRim * (1.0 - smoothstep(0.17, 0.25, abs(dot(N, V))));
+        c = mix(c, vec3(0.07, 0.07, 0.08), rim);
+        gl_FragColor = vec4(c, mix(uOpacity, min(1.0, uOpacity * 3.0), rim));
+        #include <fog_fragment>
+    }`;
+    const INK_VS = `
+    uniform float uPx; uniform float uWorld; uniform float uPush; uniform vec2 uRes;
+    #ifdef FLEX
+    ${FLEX_GLSL}
+    #endif
+    #ifdef SPLIT
+    uniform float uSplit; uniform float uSide;
+    #endif
+    #include <fog_pars_vertex>
+    void main() {
+        mat4 im = mat4(1.0);
+    #ifdef USE_INSTANCING
+        im = instanceMatrix;
+    #endif
+        if (length(im[0].xyz) < 1e-5 || uPx < 0.01) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        ${SPLIT_GLSL}
+        vec4 lp = im * vec4(position, 1.0);
+    #ifdef FLEX
+        lp.xyz += flexField(lp.xyz);
+    #endif
+        vec4 mvPosition = modelViewMatrix * lp;
+        vec3 n = normalize(normalMatrix * (mat3(im) * normal));
+        float z = max(-mvPosition.z, 0.01);
+        float focal = projectionMatrix[1][1] * uRes.y * 0.5;
+        float px = min(uPx, uWorld * focal / z);
+        mvPosition.xyz += n * (px * z / focal);
+        mvPosition.xyz *= 1.0 + uPush / max(-mvPosition.z, 0.01);    // slide back along the line of sight
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+    }`;
+    const INK_FS = `
+    uniform float uAlpha;
+    #include <fog_pars_fragment>
+    void main() {
+        gl_FragColor = vec4(0.07, 0.07, 0.08, uAlpha);
+        #include <fog_fragment>
+    }`;
+    const fogU = () => THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
+    function toonMat(hex, o = {}) {
+        const m = new THREE.ShaderMaterial({ vertexShader: TOON_VS, fragmentShader: TOON_FS, fog: true,
+            transparent: !!o.transparent, side: o.side ?? THREE.FrontSide, depthWrite: o.depthWrite ?? true,
+            uniforms: Object.assign(fogU(), { uColor: { value: new THREE.Color(hex) }, uOpacity: { value: 1 }, uHi: TOON.hi, uShade: TOON.shade, uRim: { value: o.rim || 0 } }) });
+        m.defines = {};
+        if (o.split) { m.defines.SPLIT = ''; Object.assign(m.uniforms, SPLIT); }
+        if (o.flex) { m.defines.FLEX = ''; m.uniforms.uFlexT = TOON.flexT; m.uniforms.uFlexAmp = TOON.flexAmp; }
+        if (o.colorWrite === false) m.colorWrite = false;
+        if (o.offset) { m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 4; }
+        return m;
+    }
+    function inkMat(o = {}) {
+        const m = new THREE.ShaderMaterial({ vertexShader: INK_VS, fragmentShader: INK_FS, fog: true, side: THREE.BackSide,
+            transparent: !!o.transparent,
+            uniforms: Object.assign(fogU(), {
+                uPx: o.px || TOON.px, uWorld: TOON.world,
+                uPush: o.push || TOON.push, uRes: TOON.res, uAlpha: { value: 1 } }) });
+        m.defines = {};
+        if (o.split) { m.defines.SPLIT = ''; Object.assign(m.uniforms, SPLIT); }
+        if (o.flex) { m.defines.FLEX = ''; m.uniforms.uFlexT = TOON.flexT; m.uniforms.uFlexAmp = TOON.flexAmp; }
+        return m;
+    }
+    const INK = inkMat(), INK_S = inkMat({ split: true }), INK_F = inkMat({ flex: true });
+
+    // ---- "Lines between atoms": smooth lines exactly where two atom spheres meet.
+    //  1) ID pass: every atom in its own code colour, with a depth image of the nearest surface.
+    //  2) Peel pass: the nearest surface *of a different atom* behind that one (its own depth image).
+    //  3) Where the two surfaces are only slightly apart in depth, the spheres are about to cross; the gap
+    //     divided by how fast it grows across the screen gives the distance (in pixels) to the crossing curve,
+    //     so the line can be drawn with a smooth, antialiased edge.
+    const EDGE = { w: 1.2 };
+    const idOK = renderer.capabilities.isWebGL2;            // needs gl_InstanceID, texelFetch and float depth textures
+    function mkRT() {
+        const rt = new THREE.WebGLRenderTarget(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
+        rt.depthTexture = new THREE.DepthTexture(1, 1); rt.depthTexture.type = THREE.FloatType;
+        return rt;
+    }
+    const idRT = mkRT(), peelRT = mkRT();
+    const ID_VS = `
+        uniform float uSplitOn; uniform float uSplit; uniform float uFlexOn;
+        ${FLEX_GLSL}
+        varying float vInst;
+        void main() {
+            mat4 im = mat4(1.0); float inst = 0.0;
+        #ifdef USE_INSTANCING
+            im = instanceMatrix; inst = float(gl_InstanceID);
+        #endif
+            if (length(im[0].xyz) < 1e-5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+            vec4 cV = modelViewMatrix * im * vec4(0.0, 0.0, 0.0, 1.0);
+            if (uSplitOn > 0.5 && -cV.z > uSplit) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }   // belongs to the blurred layer
+            vInst = inst;
+            vec4 lp = im * vec4(position, 1.0);
+            if (uFlexOn > 0.5) lp.xyz += flexField(lp.xyz);
+            gl_Position = projectionMatrix * modelViewMatrix * lp;
+        }`;
+    const ID_CODE = `vec3 idCode() { float i = floor(vInst + 0.5); return vec3(uMesh / 255.0, mod(i, 256.0) / 255.0, floor(i / 256.0) / 255.0); }`;
+    const idUniforms = () => ({ uMesh: { value: 0 }, uSplitOn: { value: 0 }, uSplit: SPLIT.uSplit, uFlexOn: { value: 0 }, uFlexT: TOON.flexT, uFlexAmp: TOON.flexAmp });
+    const idMat = new THREE.ShaderMaterial({ uniforms: idUniforms(), vertexShader: ID_VS,
+        fragmentShader: `uniform float uMesh; varying float vInst; ${ID_CODE}
+        void main() { gl_FragColor = vec4(idCode(), 1.0); }` });
+    const peelMat = new THREE.ShaderMaterial({ uniforms: Object.assign(idUniforms(), { tFront: { value: idRT.texture } }), vertexShader: ID_VS,
+        fragmentShader: `uniform float uMesh; uniform sampler2D tFront; varying float vInst; ${ID_CODE}
+        void main() {
+            vec3 front = texelFetch(tFront, ivec2(gl_FragCoord.xy), 0).rgb;
+            if (all(lessThan(abs(front - idCode()), vec3(0.002)))) discard;      // same atom as the front surface: peel it away
+            gl_FragColor = vec4(1.0);
+        }` });
+    let idCount = 0;
+    function idHook(mesh, split, flex) {
+        const id = ++idCount;
+        mesh.layers.enable(3);
+        mesh.onBeforeRender = (r, s, c, g, mat) => {
+            if (mat !== idMat && mat !== peelMat) return;
+            mat.uniforms.uMesh.value = id; mat.uniforms.uSplitOn.value = split ? 1 : 0; mat.uniforms.uFlexOn.value = flex ? 1 : 0; mat.uniformsNeedUpdate = true;
+        };
+    }
+    const edgeMat = new THREE.ShaderMaterial({
+        transparent: true, depthTest: false, depthWrite: false,
+        uniforms: { tD1: { value: idRT.depthTexture }, tD2: { value: peelRT.depthTexture }, uW: { value: 1 },
+                    uNear: { value: 0.1 }, uFar: { value: 500 }, uFogNear: { value: 0 }, uFogFar: { value: 1 } },
+        vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: `
+        uniform sampler2D tD1; uniform sampler2D tD2; uniform float uW; uniform float uNear; uniform float uFar; uniform float uFogNear; uniform float uFogFar;
+        float lin(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+        float gapAt(ivec2 p) {                     // depth gap (Å) from the front surface to the next atom's surface; < 0 = empty
+            float a = texelFetch(tD1, p, 0).r, b = texelFetch(tD2, p, 0).r;
+            if (a >= 1.0) return -1.0;
+            if (b >= 1.0) return 1e4;
+            return lin(b) - lin(a);
+        }
+        void main() {
+            ivec2 p = ivec2(gl_FragCoord.xy);
+            float d1 = texelFetch(tD1, p, 0).r;
+            if (d1 >= 1.0) discard;
+            float g = gapAt(p);
+            if (g > 1.5) discard;                  // the next atom is well behind: no crossing nearby
+            const float J = 0.8;                   // ignore jumps (hidden edges of other atoms) when measuring the slope
+            float gR = gapAt(p + ivec2(1, 0)), gL = gapAt(p - ivec2(1, 0)), gU = gapAt(p + ivec2(0, 1)), gD = gapAt(p - ivec2(0, 1));
+            float dR = abs(gR - g), dL = abs(g - gL), dU = abs(gU - g), dD = abs(g - gD);
+            float sx = max((gR >= 0.0 && dR < J) ? dR : 0.0, (gL >= 0.0 && dL < J) ? dL : 0.0);
+            float sy = max((gU >= 0.0 && dU < J) ? dU : 0.0, (gD >= 0.0 && dD < J) ? dD : 0.0);
+            float slope = length(vec2(sx, sy));
+            float dist = slope > 1e-6 ? g / slope : 100.0;          // pixels to the crossing curve
+            float cov = 1.0 - smoothstep(0.5 * uW - 0.5, 0.5 * uW + 0.5, dist);
+            if (cov <= 0.0) discard;
+            float vis = 1.0 - smoothstep(uFogNear, uFogFar, lin(d1));
+            gl_FragColor = vec4(0.07, 0.07, 0.08, cov * vis);
+        }`
+    });
+    const edgeScene = new THREE.Scene(), edgeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    { const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), edgeMat); q.frustumCulled = false; edgeScene.add(q); }
+    function sizeId() { const s = TOON.res.value; idRT.setSize(s.x, s.y); peelRT.setSize(s.x, s.y); }
+    sizeId();
+
+    const sphereHi = new THREE.SphereGeometry(1, 18, 13), sphereLo = new THREE.SphereGeometry(1, 12, 9);
+    const cylGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
+    function inst(geo, mat, n, parent = world) { const m = new THREE.InstancedMesh(geo, mat, n); m.frustumCulled = false; parent.add(m); return m; }
+    function shell(src, mat, geo = sphereLo) { const m = inst(geo, mat, src.count); m.instanceMatrix = src.instanceMatrix; return m; }
+
+    // =====================================================================
+    //  Elements (cartoon palette) and radii
+    // =====================================================================
+    const COL = { C: 0x3b3b3f, H: 0xe2e2e2, O: 0xd0281c, N: 0x2f62b0, S: 0xf3cd3a, P: 0xf08c2a,
+                  K: 0x8b5cf6, Na: 0x38bdf8, Cl: 0x22c55e, Mg: 0x84cc16, Ca: 0xf472b6 };
+    const SF_R = { C: 1.53, N: 1.40, O: 1.37, S: 1.62, P: 1.62, H: 0.99, K: 1.55, Na: 1.45, Cl: 1.6, Mg: 1.3, Ca: 1.45 };   // 0.9 × van der Waals
+    const BS_R = { C: 0.36, N: 0.34, O: 0.34, S: 0.44, P: 0.42, H: 0.22, K: 1.1, Na: 0.9, Cl: 1.0, Mg: 0.8, Ca: 0.9 };
+    const BOND_COL = 0xb8bcc4, BOND_R = 0.1;
+    const EL5 = ['C', 'N', 'O', 'S', 'P'];
+
+    // A static set of atoms drawn as one InstancedMesh per element, with a silhouette outline shell
+    function atomSet(list, o = {}) {
+        const by = {};
+        list.forEach(a => (by[a.el] ||= []).push(a.p));
+        const parts = Object.entries(by).map(([el, ps]) => {
+            const mat = toonMat(COL[el], { transparent: !!o.transparent, flex: !!o.flex });
+            const mesh = inst(sphereHi, mat, ps.length);
+            idHook(mesh, false, !!o.flex);
+            return { el, ps, mat, mesh, ink: shell(mesh, o.ink || INK) };
+        });
+        const M = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = V(1, 1, 1);
+        let lastF = -1;
+        return {
+            parts,
+            refresh() { lastF = -1; },                // positions moved: recompute matrices on the next setSF
+            setSF(f) {
+                if (Math.abs(f - lastF) < 1e-4) return; lastF = f;
+                for (const p of parts) {
+                    const r = lerp(BS_R[p.el], SF_R[p.el], f); sc.set(r, r, r);
+                    p.ps.forEach((pos, i) => { M.compose(pos, q, sc); p.mesh.setMatrixAt(i, M); });
+                    p.mesh.instanceMatrix.needsUpdate = true;
+                }
+            },
+            setVisible(v) { parts.forEach(p => { p.mesh.visible = p.ink.visible = v; }); },
+            setOpacity(a) {
+                parts.forEach(p => { p.mat.uniforms.uOpacity.value = a; p.mat.depthWrite = a > 0.98;
+                    p.mesh.visible = a > 0.01; p.ink.visible = a > 0.98;
+                    if (a > 0.98) p.mesh.layers.enable(3); else p.mesh.layers.disable(3); });   // atom lines only when opaque
+            }
+        };
+    }
+    // Static bonds (ball-and-stick), fading out as the atoms swell
+    function bondSet(pairs, o = {}) {
+        const mat = toonMat(BOND_COL, { transparent: true, flex: !!o.flex });
+        const mesh = inst(new THREE.CylinderGeometry(1, 1, 1, 10, 1, false), mat, Math.max(1, pairs.length));
+        const M = new THREE.Matrix4(), q = new THREE.Quaternion(), dd = V(0, 0, 0), mid = V(0, 0, 0), sc = V(BOND_R, 1, BOND_R);
+        function rebuild() {                         // bond matrices from the (possibly moved) atom positions
+            pairs.forEach(([A, B], k) => {
+                dd.copy(B).sub(A); const L = dd.length() || 1e-4;
+                mid.copy(A).addScaledVector(dd, 0.5); sc.y = L;
+                M.compose(mid, q.setFromUnitVectors(UP, dd.multiplyScalar(1 / L)), sc);
+                mesh.setMatrixAt(k, M);
+            });
+            mesh.instanceMatrix.needsUpdate = true;
+        }
+        rebuild();
+        if (!pairs.length) mesh.count = 0;
+        const ink = shell(mesh, o.flex ? INK_F : INK, cylGeo);
+        return {
+            rebuild,
+            update(sf, vis = 1) {
+                const a = (1 - sf) * vis;
+                mesh.visible = a > 0.01; mat.uniforms.uOpacity.value = a; mat.depthWrite = a > 0.98;
+                ink.visible = a > 0.98;
+            }
+        };
+    }
+    function findBonds(ps, els, cutFn) {                 // distance-based bonding on a spatial hash
+        const out = [], HB = 2.2, hash = new Map(), key = (x, y, z) => x + ',' + y + ',' + z;
+        ps.forEach((p, i) => { const k = key(Math.floor(p.x / HB), Math.floor(p.y / HB), Math.floor(p.z / HB)); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(i); });
+        ps.forEach((p, i) => {
+            const cx = Math.floor(p.x / HB), cy = Math.floor(p.y / HB), cz = Math.floor(p.z / HB);
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+                const l = hash.get(key(cx + a, cy + b, cz + c)); if (!l) continue;
+                for (const j of l) { if (j <= i) continue; const d2 = p.distanceToSquared(ps[j]), cut = cutFn(els[i], els[j]);
+                    if (d2 < cut * cut && d2 > 0.8) out.push([p, ps[j]]); }
+            }
+        });
+        return out;
+    }
+
+    // =====================================================================
+    //  DNA (crystal duplex, extended) + the flipped-out target cytosine nucleotide in the enzyme's pocket
+    // =====================================================================
+    // ---- tidy the DNA graph before adding H: merge duplicate atoms at the seams of the extended arms,
+    //      (hydrogens that end up inside a neighbouring atom are dropped after placement)
+    function cleanGraph(A, B) {
+        const HB = 2.2, hash = new Map(), key = (x, y, z) => x + ',' + y + ',' + z, map = new Int32Array(A.length);
+        const cell = (p) => [Math.floor(p.x / HB), Math.floor(p.y / HB), Math.floor(p.z / HB)];
+        const around = (p, fn) => { const [cx, cy, cz] = cell(p);
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) { const l = hash.get(key(cx + a, cy + b, cz + c)); if (l) l.forEach(fn); } };
+        const out = [];
+        A.forEach((at, i) => {
+            let dup = -1;
+            around(at.p, j => { if (dup < 0 && out[j].el === at.el && out[j].p.distanceToSquared(at.p) < 0.81) dup = j; });
+            if (dup >= 0) { map[i] = dup; return; }
+            map[i] = out.length; out.push(at);
+            const k = key(...cell(at.p)); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(map[i]);
+        });
+        const seen = new Set(), bonds = [];
+        const addB = (i, j) => { if (i === j) return; const k = i < j ? i + ',' + j : j + ',' + i; if (seen.has(k)) return; seen.add(k); bonds.push([i, j]); };
+        B.forEach(([i, j]) => addB(map[i], map[j]));
+        return { A: out, B: bonds, map };
+    }
+    // ---- add hydrogens to DNA heavy atoms from their bonding (crystal structures don't include H)
+    //      sugar carbons: sp3 (4 − neighbours); base carbons: aromatic sp2 (3 − neighbours), methyl carbons: 3 H;
+    //      amino N: 2 H in the base plane; imino N–H only on T N3 and G N1; phosphate and ring O: none
+    function addHydrogens(A, B) {
+        const nb = A.map(() => []);
+        B.forEach(([i, j]) => { nb[i].push(j); nb[j].push(i); });
+        const n0 = A.length;
+        const hs = [], add = (i, dir, len) => hs.push({ i, p: A[i].p.clone().addScaledVector(dir, len) });
+        const u = (i, j) => A[j].p.clone().sub(A[i].p).normalize();
+        const away = (i, ns) => ns.reduce((s, j) => s.sub(u(i, j)), new THREE.Vector3()).normalize();
+        for (let i = 0; i < n0; i++) {
+            const a = A[i], ns = nb[i], dg = ns.length;
+            if (a.el === 'C') {
+                const sp3 = a.cat <= 2 || a.cat === 7 || dg === 1;
+                const nH = (sp3 ? 4 : 3) - dg;
+                if (nH <= 0 || dg === 0) continue;
+                if (!sp3 || nH === 1) { add(i, away(i, ns), sp3 ? 1.09 : 1.08); continue; }
+                const us = ns.map(j => u(i, j));
+                if (nH === 2) {
+                    const b = us[0].clone().add(us[1]).negate().normalize(), n = new THREE.Vector3().crossVectors(us[0], us[1]).normalize();
+                    [1, -1].forEach(s => add(i, b.clone().multiplyScalar(0.577).addScaledVector(n, 0.816 * s).normalize(), 1.09));
+                } else {
+                    const b0 = us[0], j = ns[0], k = nb[j].find(x => x !== i);
+                    let ref = perpPart(k != null ? A[k].p.clone().sub(A[j].p) : V(0, 1, 0), b0);
+                    if (ref.lengthSq() < 1e-6) ref = perpPart(V(1, 0, 0), b0);
+                    ref.normalize().negate();                                   // staggered against the neighbour's bonds
+                    const e2 = new THREE.Vector3().crossVectors(b0, ref).normalize();
+                    for (let m = 0; m < 3; m++) { const ph = m * 2 * Math.PI / 3;
+                        add(i, b0.clone().multiplyScalar(-1 / 3).addScaledVector(ref, 0.943 * Math.cos(ph)).addScaledVector(e2, 0.943 * Math.sin(ph)).normalize(), 1.09); }
+                }
+            } else if (a.el === 'N') {
+                if (dg === 1) {
+                    const j = ns[0], u1 = u(i, j), o = nb[j].filter(x => x !== i);
+                    let w = o.length >= 2 ? new THREE.Vector3().crossVectors(new THREE.Vector3().crossVectors(A[o[0]].p.clone().sub(A[j].p), A[o[1]].p.clone().sub(A[j].p)), u1)
+                                          : perpPart(V(0, 1, 0), u1);
+                    w.normalize();
+                    [1, -1].forEach(s => add(i, u1.clone().multiplyScalar(-0.5).addScaledVector(w, 0.866 * s).normalize(), 1.01));
+                } else if (dg === 2 && (a.cat === 4 || a.cat === 5)) {
+                    const exo = (j) => nb[j].some(k => k !== i && (A[k].el === 'O' || A[k].el === 'N') && nb[k].length === 1);
+                    if (ns.every(j => A[j].el === 'C' && exo(j))) add(i, away(i, ns), 1.01);
+                }
+            }
+        }
+        // drop H that would sit inside another atom (where the stretched DNA arms distort the geometry)
+        const HB = 3, hash = new Map(), key = (x, y, z) => x + ',' + y + ',' + z;
+        for (let i = 0; i < n0; i++) { const p = A[i].p, k = key(Math.floor(p.x / HB), Math.floor(p.y / HB), Math.floor(p.z / HB)); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(i); }
+        const kept = [];
+        const clash = (h, lim2, list) => { const cx = Math.floor(h.p.x / HB), cy = Math.floor(h.p.y / HB), cz = Math.floor(h.p.z / HB);
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) { const l = list.get(key(cx + a, cy + b, cz + c)); if (!l) continue;
+                for (const j of l) { const q = typeof j === 'number' ? A[j].p : j.p; if (j !== h.i && q.distanceToSquared(h.p) < lim2) return true; } }
+            return false; };
+        const hh = new Map();
+        for (const h of hs) {
+            if (clash(h, 1.45 * 1.45, hash) || clash(h, 1.0, hh)) continue;
+            kept.push(h); const k = key(Math.floor(h.p.x / HB), Math.floor(h.p.y / HB), Math.floor(h.p.z / HB)); if (!hh.has(k)) hh.set(k, []); hh.get(k).push(h);
+        }
+        for (const h of kept) { A.push({ el: 'H', cat: A[h.i].cat, p: h.p }); B.push([h.i, A.length - 1]); }
+        return { placed: hs.length, kept: kept.length };
+    }
+    const dna = (() => {
+        // heavy atoms from the crystal duplex (extended), plus the flipped-out target cytosine nucleotide in the pocket
+        let A = CRY.dna.map((p, i) => ({ el: EL5[CRY.dnaEl[i]], cat: CRY.dnaCat[i], p }));
+        let B = [];
+        for (let k = 0; k < CRY.dnaBonds.length; k += 2) B.push([CRY.dnaBonds[k], CRY.dnaBonds[k + 1]]);
+        const gi = {};
+        for (const k in SUB_EL) if (SUB_EL[k] !== 'H' && G0[k]) { gi[k] = A.length; A.push({ el: SUB_EL[k], cat: /p$/.test(k) ? 0 : 6, p: G0[k].clone() }); }
+        [['N1','C2'],['C2','N3'],['N3','C4'],['C4','C5'],['C5','C6'],['C6','N1'],['C2','O2'],['C4','N4'],
+         ['N1','C1p'],['C1p','C2p'],['C2p','C3p'],['C3p','C4p'],['C4p','O4p'],['O4p','C1p'],['C4p','C5p'],['C3p','O3p']].forEach(([a, b]) => B.push([gi[a], gi[b]]));
+        // join it to the strand: C5′–O5′ and O3′–P
+        const nearestIdx = (p) => { let i = -1, d = 1e9; CRY.dna.forEach((q, j) => { const e = q.distanceTo(p); if (e < d) { d = e; i = j; } }); return { i, d }; };
+        const o5 = CRY.sugar["O5'"];
+        if (o5) {
+            const n = nearestIdx(o5);
+            if (n.d > 0.3) { n.i = A.length; A.push({ el: 'O', cat: 1, p: o5.clone() }); CRY.dna.forEach((q, j) => { if (q.distanceTo(o5) < 1.75) B.push([n.i, j]); }); }
+            B.push([gi.C5p, n.i]);
+        }
+        if (CRY.p3) { const n = nearestIdx(CRY.p3); if (n.d < 0.3) B.push([gi.O3p, n.i]); }
+        ({ A, B } = cleanGraph(A, B));
+        addHydrogens(A, B);
+        const list = A.map(a => ({ el: a.el, p: a.p }));
+        const pairs = B.map(([i, j]) => [A[i].p, A[j].p]);
+        const atoms = atomSet(list), bonds = bondSet(pairs);
+        // "is this point inside the DNA?" for the diffusing molecules
+        const HB = 4, hash = new Map(), key = (x, y, z) => x + ',' + y + ',' + z;
+        const base = A.map(a => a.p.clone());
+        base.forEach((p) => { const k = key(Math.floor(p.x / HB), Math.floor(p.y / HB), Math.floor(p.z / HB)); if (!hash.has(k)) hash.set(k, []); hash.get(k).push(p); });
+        // ---- slow undulation: both arms sway in two directions as gentle waves travelling outward from the enzyme.
+        //      The part held by the protein stays still; the sway grows with distance along the helix axis. Each slice of
+        //      the helix moves as a unit, so the double helix itself keeps its shape.
+        const AX = CRY.axis.clone().normalize();
+        const N1 = new THREE.Vector3().crossVectors(AX, Math.abs(AX.y) < 0.9 ? UP : V(1, 0, 0)).normalize(), N2 = new THREE.Vector3().crossVectors(AX, N1);
+        const sAx = Float32Array.from(base, p => p.dot(AX));
+        let waveT = 0;
+        const disp = (s, out) => {
+            const a = Math.abs(s), amp = smooth(45, 120, a) * Math.min(9, 0.04 * a);   // up to ~9 Å of sway
+            if (amp < 1e-3) return out.set(0, 0, 0);
+            const ph = 2 * Math.PI * a / 170 - waveT * 2 * Math.PI / 32 + (s < 0 ? 0 : 1.7);
+            return out.set(0, 0, 0).addScaledVector(N1, amp * Math.sin(ph)).addScaledVector(N2, 0.6 * amp * Math.sin(0.8 * ph + 2.1));
+        };
+        const dv = V(0, 0, 0), qp = V(0, 0, 0);
+        function undulate(dt, sf) {
+            waveT += dt;
+            for (let i = 0; i < A.length; i++) A[i].p.copy(base[i]).add(disp(sAx[i], dv));
+            atoms.refresh();
+            if (sf < 0.99) bonds.rebuild();
+        }
+        const near = (p0, d) => { const p = qp.copy(p0).sub(disp(p0.dot(AX), dv));   // look up the un-swayed DNA
+            const cx = Math.floor(p.x / HB), cy = Math.floor(p.y / HB), cz = Math.floor(p.z / HB), d2 = d * d;
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let e = -1; e <= 1; e++) { const l = hash.get(key(cx + a, cy + b, cz + e)); if (l) for (const q2 of l) if (q2.distanceToSquared(p) < d2) return true; }
+            return false; };
+        return { atoms, bonds, near, undulate };
+    })();
+
+    // =====================================================================
+    //  Protein: cartoon molecular surface (smoothed blob, inked silhouette) or its atoms
+    // =====================================================================
+    const protein = (() => {
+        const ELN = ['C', 'N', 'O', 'S'];
+        const atoms = CRY.prot.map((p, i) => ({ p, el: ELN[CRY.protEl[i]] }));
+        // distance from the protein's van der Waals surface (keeps diffusing molecules outside)
+        const FB = 4, fh = new Map(), fk = (x, y, z) => x + ',' + y + ',' + z;
+        atoms.forEach(a => { const k = fk(Math.floor(a.p.x / FB), Math.floor(a.p.y / FB), Math.floor(a.p.z / FB)); if (!fh.has(k)) fh.set(k, []); fh.get(k).push(a.p); });
+        const field = (p) => { const cx = Math.floor(p.x / FB), cy = Math.floor(p.y / FB), cz = Math.floor(p.z / FB); let m = 1e9;
+            for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let e = -1; e <= 1; e++) { const l = fh.get(fk(cx + a, cy + b, cz + e)); if (l) for (const q of l) m = Math.min(m, q.distanceToSquared(p)); }
+            return Math.min(Math.sqrt(m), 4 * FB) - 1.8; };
+
+        // ---- surface: soft union of van der Waals spheres, meshed with surface nets, then Taubin-smoothed into a blob
+        const VDW = { C: 1.70, N: 1.55, O: 1.52, S: 1.80 };
+        const KS = 0.42, H = 0.72, CUT = 5 * KS;
+        const sLo = V(1e9, 1e9, 1e9), sHi = V(-1e9, -1e9, -1e9);
+        atoms.forEach(a => { sLo.min(a.p); sHi.max(a.p); });
+        const pad = 2.2 + CUT, sOrg = V(sLo.x - pad, sLo.y - pad, sLo.z - pad);
+        const nx = Math.ceil((sHi.x - sLo.x + 2 * pad) / H) + 1, ny = Math.ceil((sHi.y - sLo.y + 2 * pad) / H) + 1, nz = Math.ceil((sHi.z - sLo.z + 2 * pad) / H) + 1;
+        const gi = (x, y, z) => x + nx * (y + ny * z);
+        const acc = new Float32Array(nx * ny * nz);
+        for (const a of atoms) {
+            const r = VDW[a.el], reach = r + CUT;
+            const x0 = Math.max(0, Math.floor((a.p.x - reach - sOrg.x) / H)), x1 = Math.min(nx - 1, Math.ceil((a.p.x + reach - sOrg.x) / H));
+            const y0 = Math.max(0, Math.floor((a.p.y - reach - sOrg.y) / H)), y1 = Math.min(ny - 1, Math.ceil((a.p.y + reach - sOrg.y) / H));
+            const z0 = Math.max(0, Math.floor((a.p.z - reach - sOrg.z) / H)), z1 = Math.min(nz - 1, Math.ceil((a.p.z + reach - sOrg.z) / H));
+            for (let z = z0; z <= z1; z++) { const dz = sOrg.z + z * H - a.p.z;
+                for (let y = y0; y <= y1; y++) { const dy = sOrg.y + y * H - a.p.y;
+                    for (let x = x0; x <= x1; x++) { const dx = sOrg.x + x * H - a.p.x;
+                        const sd = Math.sqrt(dx * dx + dy * dy + dz * dz) - r;
+                        if (sd < CUT) acc[gi(x, y, z)] += Math.exp(-sd / KS);
+                    } } }
+        }
+        const vals = new Float32Array(acc.length);
+        for (let i = 0; i < acc.length; i++) vals[i] = acc[i] > 1e-6 ? -KS * Math.log(acc[i]) : 10;
+        const cellV = new Int32Array(nx * ny * nz).fill(-1), pos = [];
+        const CO = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+        const ED = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+        const cv = new Float32Array(8);
+        for (let z = 0; z < nz - 1; z++) for (let y = 0; y < ny - 1; y++) for (let x = 0; x < nx - 1; x++) {
+            let neg = 0;
+            for (let c = 0; c < 8; c++) { cv[c] = vals[gi(x + CO[c][0], y + CO[c][1], z + CO[c][2])]; if (cv[c] < 0) neg++; }
+            if (neg === 0 || neg === 8) continue;
+            let sx = 0, sy = 0, sz = 0, n = 0;
+            for (const [a, b] of ED) {
+                if ((cv[a] < 0) === (cv[b] < 0)) continue;
+                const t = cv[a] / (cv[a] - cv[b]);
+                sx += CO[a][0] + t * (CO[b][0] - CO[a][0]); sy += CO[a][1] + t * (CO[b][1] - CO[a][1]); sz += CO[a][2] + t * (CO[b][2] - CO[a][2]); n++;
+            }
+            cellV[gi(x, y, z)] = pos.length / 3;
+            pos.push(sOrg.x + H * (x + sx / n), sOrg.y + H * (y + sy / n), sOrg.z + H * (z + sz / n));
+        }
+        const tris = [];
+        const quad = (a, b, c, d) => { tris.push(a, b, c, a, c, d); };
+        for (let z = 1; z < nz - 1; z++) for (let y = 1; y < ny - 1; y++) for (let x = 1; x < nx - 1; x++) {
+            const in0 = vals[gi(x, y, z)] < 0;
+            if (in0 !== (vals[gi(x + 1, y, z)] < 0)) {
+                const a = cellV[gi(x, y - 1, z - 1)], b = cellV[gi(x, y, z - 1)], c = cellV[gi(x, y, z)], d = cellV[gi(x, y - 1, z)];
+                if (a >= 0 && b >= 0 && c >= 0 && d >= 0) in0 ? quad(a, b, c, d) : quad(a, d, c, b);
+            }
+            if (in0 !== (vals[gi(x, y + 1, z)] < 0)) {
+                const a = cellV[gi(x - 1, y, z - 1)], b = cellV[gi(x - 1, y, z)], c = cellV[gi(x, y, z)], d = cellV[gi(x, y, z - 1)];
+                if (a >= 0 && b >= 0 && c >= 0 && d >= 0) in0 ? quad(a, b, c, d) : quad(a, d, c, b);
+            }
+            if (in0 !== (vals[gi(x, y, z + 1)] < 0)) {
+                const a = cellV[gi(x - 1, y - 1, z)], b = cellV[gi(x, y - 1, z)], c = cellV[gi(x, y, z)], d = cellV[gi(x - 1, y, z)];
+                if (a >= 0 && b >= 0 && c >= 0 && d >= 0) in0 ? quad(a, b, c, d) : quad(a, d, c, b);
+            }
+        }
+        {   // Taubin smoothing: alternating shrink/inflate steps remove atom-scale bumps without shrinking the protein
+            const nv0 = pos.length / 3, deg2 = new Int32Array(nv0 + 1);
+            for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) deg2[tris[t + e]] += 2;
+            const start = new Int32Array(nv0 + 1); for (let v = 0; v < nv0; v++) start[v + 1] = start[v] + deg2[v];
+            const adj = new Int32Array(start[nv0]), fill = start.slice(0, nv0);
+            for (let t = 0; t < tris.length; t += 3) for (let e = 0; e < 3; e++) {
+                const a = tris[t + e]; adj[fill[a]++] = tris[t + (e + 1) % 3]; adj[fill[a]++] = tris[t + (e + 2) % 3];
+            }
+            let P = Float32Array.from(pos), Q = new Float32Array(P.length);
+            for (let it = 0; it < 20; it++) {
+                const f = it % 2 ? -0.53 : 0.5;
+                for (let v = 0; v < nv0; v++) {
+                    const s = start[v], n = start[v + 1] - s;
+                    if (!n) { Q[3 * v] = P[3 * v]; Q[3 * v + 1] = P[3 * v + 1]; Q[3 * v + 2] = P[3 * v + 2]; continue; }
+                    let ax = 0, ay = 0, az = 0;
+                    for (let j = s; j < s + n; j++) { const u = adj[j]; ax += P[3 * u]; ay += P[3 * u + 1]; az += P[3 * u + 2]; }
+                    Q[3 * v] = P[3 * v] + f * (ax / n - P[3 * v]); Q[3 * v + 1] = P[3 * v + 1] + f * (ay / n - P[3 * v + 1]); Q[3 * v + 2] = P[3 * v + 2] + f * (az / n - P[3 * v + 2]);
+                }
+                [P, Q] = [Q, P];
+            }
+            for (let i = 0; i < pos.length; i++) pos[i] = P[i];
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(tris); geo.computeVertexNormals();
+        // depth pre-pass, then the see-through cartoon colour, then the ink silhouette (only where it sticks out past the edge)
+        // the pre-pass is nudged slightly deeper (polygon offset) so the colour pass never z-fights with it — that was the flicker
+        const depthMesh = new THREE.Mesh(geo, toonMat(0, { transparent: true, colorWrite: false, offset: true, flex: true }));
+        const colMat = toonMat(0xb59cf0, { transparent: true, depthWrite: false, rim: 1, flex: true });
+        const colMesh = new THREE.Mesh(geo, colMat);
+        const silMat = inkMat({ px: TOON.protPx, push: TOON.zero, transparent: true, flex: true });
+        const silMesh = new THREE.Mesh(geo, silMat);
+        depthMesh.renderOrder = 50; silMesh.renderOrder = 50.5; colMesh.renderOrder = 51;
+        [depthMesh, colMesh, silMesh].forEach(m => { m.frustumCulled = false; m.layers.set(2); world.add(m); });
+
+        // ---- atoms view
+        const pAtoms = atomSet(atoms, { transparent: true, flex: true, ink: INK_F });
+        const pBonds = bondSet(findBonds(atoms.map(a => a.p), atoms.map(a => a.el), () => 1.9), { flex: true });
+        let mode = 'surface', opacity = 0.35;
+        return {
+            field, atoms: pAtoms, colMat,
+            setMode(m) { mode = m; }, setOpacity(a) { opacity = a; },
+            update(sf) {
+                const surf = mode === 'surface';
+                depthMesh.visible = colMesh.visible = silMesh.visible = surf && opacity > 0.01;
+                colMat.uniforms.uOpacity.value = opacity; silMat.uniforms.uAlpha.value = Math.min(1, opacity * 2.5);
+                pAtoms.setSF(sf);
+                if (surf) { pAtoms.setVisible(false); pBonds.update(1, 0); }
+                else { pAtoms.setOpacity(opacity); pBonds.update(sf, opacity); }
+            }
+        };
+    })();
+
+    // =====================================================================
+    //  Protein ribbons: backbone (N–CA–C–O found by bond lengths in the crystal's atom order), smoothed
+    //  through the CA atoms. Helices = wide flat ribbons, β-strands = flat ribbons ending in an arrowhead,
+    //  loops = thin tubes. Cartoon-shaded with an ink outline.
+    // =====================================================================
+    const ribbons = (() => {
+        const P = CRY.prot, E = CRY.protEl;               // 0 C, 1 N, 2 O, 3 S
+        const res = [];
+        for (let i = 0; i + 3 < P.length; i++) {
+            if (E[i] !== 1 || E[i + 1] !== 0 || E[i + 2] !== 0 || E[i + 3] !== 2) continue;
+            const a = P[i].distanceTo(P[i + 1]), b = P[i + 1].distanceTo(P[i + 2]), c = P[i + 2].distanceTo(P[i + 3]);
+            if (a > 1.3 && a < 1.6 && b > 1.4 && b < 1.65 && c > 1.15 && c < 1.35) res.push({ ca: P[i + 1], o: P[i + 3] });
+        }
+        const chains = []; let cur = [];
+        res.forEach((r, k) => { if (k && r.ca.distanceTo(res[k - 1].ca) > 4.2) { chains.push(cur); cur = []; } cur.push(r); });
+        if (cur.length) chains.push(cur);
+        const allCA = res.map(r => r.ca), NR = allCA.length;
+        const ext = allCA.map((p, k) => k > 0 && k < NR - 1 && allCA[k - 1].distanceTo(allCA[k + 1]) > 6.4);   // extended backbone
+        const helixG = new Array(NR).fill(false);
+        for (let j = 0; j + 4 < NR; j++) if (allCA[j].distanceTo(allCA[j + 3]) < 5.9 && allCA[j].distanceTo(allCA[j + 4]) < 6.7) for (let k = j; k <= j + 4; k++) helixG[k] = true;
+        const group = new THREE.Group(); world.add(group);
+        const mat = toonMat(0xa48ae8, { flex: true }), ink = inkMat({ push: { value: 0.15 }, flex: true });     // colour follows the protein colour control
+        const R = 10, SPR = 8;                                       // radial segments, samples per residue
+        for (const ch of chains) {
+            const n = ch.length; if (n < 4) continue;
+            const ca = ch.map(r => r.ca), d = (i, j) => ca[i].distanceTo(ca[j]);
+            // secondary structure from CA geometry
+            const ss = new Array(n).fill('C');
+            for (let j = 0; j + 4 < n; j++) if (d(j, j + 3) < 5.9 && d(j, j + 4) < 6.7) for (let k = j; k <= j + 4; k++) ss[k] = 'H';
+            // β-strand: an extended residue with an extended, non-helical partner CA nearby elsewhere in the protein
+            for (let j = 1; j + 1 < n; j++) {
+                if (ss[j] === 'H' || d(j - 1, j + 1) < 6.4) continue;
+                const gIdx = res.indexOf(ch[j]);
+                if (allCA.some((q, k) => Math.abs(k - gIdx) > 3 && ext[k] && !helixG[k] && q.distanceTo(ca[j]) < 5.3)) ss[j] = 'E';
+            }
+            const clean = (t, min) => { for (let j = 0; j < n;) { let k = j; while (k < n && ss[k] === ss[j]) k++; if (ss[j] === t && k - j < min) for (let m = j; m < k; m++) ss[m] = 'C'; j = k; } };
+            clean('H', 4); clean('E', 3);
+            // residue frames: helices face outward from the axis, everything else follows the peptide C=O
+            const nrm = ch.map((r, i) => {
+                let v;
+                if (ss[i] === 'H' && i > 0 && i < n - 1) v = ca[i].clone().multiplyScalar(2).sub(ca[i - 1]).sub(ca[i + 1]);
+                else v = r.o.clone().sub(r.ca);
+                return v.normalize();
+            });
+            const W = { H: [1.35, 0.26], E: [1.15, 0.26], C: [0.32, 0.32] };
+            const curve = new THREE.CatmullRomCurve3(ca, false, 'centripetal');
+            const N = (n - 1) * SPR + 1, pos = [], nor = [], idx = [];
+            let prevN = null;
+            for (let s = 0; s < N; s++) {
+                const t = s / (N - 1), u = t * (n - 1), i = Math.min(n - 2, Math.floor(u)), f = u - i;
+                const c = curve.getPoint(t), T = curve.getTangent(t).normalize();
+                let w, th;
+                if (ss[i] === 'E' && ss[i + 1] !== 'E') { w = lerp(1.75, W.C[0], f); th = lerp(W.E[1], W.C[1], f); }   // arrowhead
+                else { const k = smooth(0, 1, f); w = lerp(W[ss[i]][0], W[ss[i + 1]][0], k); th = lerp(W[ss[i]][1], W[ss[i + 1]][1], k); }
+                const nb = nrm[i].clone().lerp(nrm[i + 1].clone().multiplyScalar(nrm[i].dot(nrm[i + 1]) < 0 ? -1 : 1), f);
+                let Nv = perpPart(nb, T);
+                if (Nv.lengthSq() < 1e-8) Nv = prevN ? perpPart(prevN, T) : perpPart(UP, T);
+                Nv.normalize();
+                if (prevN && Nv.dot(prevN) < 0) Nv.negate();          // no sudden flips along the ribbon
+                prevN = Nv;
+                const B = new THREE.Vector3().crossVectors(T, Nv).normalize();
+                for (let r = 0; r < R; r++) {
+                    const a = r / R * Math.PI * 2, cs = Math.cos(a), sn = Math.sin(a);
+                    pos.push(c.x + B.x * w * cs + Nv.x * th * sn, c.y + B.y * w * cs + Nv.y * th * sn, c.z + B.z * w * cs + Nv.z * th * sn);
+                    const m = B.clone().multiplyScalar(cs / w).addScaledVector(Nv, sn / th).normalize();
+                    nor.push(m.x, m.y, m.z);
+                }
+            }
+            for (let s = 0; s < N - 1; s++) for (let r = 0; r < R; r++) {
+                const a = s * R + r, b = s * R + (r + 1) % R, c2 = a + R, d2 = b + R;
+                idx.push(a, c2, b, b, c2, d2);
+            }
+            // end caps (closed tube, so the outline shell works)
+            [[0, -1], [N - 1, 1]].forEach(([s, sg]) => {
+                const base = pos.length / 3, c = curve.getPoint(s / (N - 1)), T = curve.getTangent(s / (N - 1)).normalize().multiplyScalar(sg);
+                pos.push(c.x, c.y, c.z); nor.push(T.x, T.y, T.z);
+                for (let r = 0; r < R; r++) { const a = s * R + r, b = s * R + (r + 1) % R; sg > 0 ? idx.push(base, a, b) : idx.push(base, b, a); }
+            });
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+            g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+            g.setIndex(idx);
+            group.add(new THREE.Mesh(g, mat), new THREE.Mesh(g, ink));
+        }
+        return { group, mat, residues: res.length, chains: chains.length };
+    })();
+
+    // =====================================================================
+    //  Cytosol: water, K⁺, phosphate, glucose, ATP diffusing around the enzyme (cartoon space-filling or ball-and-stick)
+    // =====================================================================
+    const bgMols = (() => {
+        const CTR = CRY.protCen.clone().multiplyScalar(0.55);
+        // The molecules fill a sphere around the enzyme, spread uniformly, large enough that from any view the fog
+        // is reached before its edge. The concentration control picks what fraction of them take part (up to 150 %).
+        // Counts are given per 100 Å ball at the original density.
+        const R = 260, R2 = R * R, FMAX = 1.5, tanV = Math.tan(20 * deg);
+        const NM = (n) => Math.max(1, Math.round(n * (R / 100) ** 3 * FMAX));
+        let conc = 0.8;
+        const T = [];
+        const cen = (atoms) => { const c = V(0, 0, 0); atoms.forEach(a => c.add(a[1])); c.multiplyScalar(1 / atoms.length); atoms.forEach(a => a[1] = a[1].clone().sub(c)); return atoms; };
+        { const tt = [V(1, 1, 1), V(1, -1, -1), V(-1, 1, -1), V(-1, -1, 1)].map(v => v.normalize().multiplyScalar(1.53));
+          const a = [['P', V(0, 0, 0)], ...tt.map(v => ['O', v])]; a.push(['H', tt[0].clone().multiplyScalar(1.63)]);
+          T.push({ name: 'phosphate', atoms: a, bonds: [[0, 1], [0, 2], [0, 3], [0, 4], [1, 5]], n: NM(50) }); }
+        T.push({ name: 'water', atoms: cen([['O', V(0, 0, 0)], ['H', V(0.757, 0.586, 0)], ['H', V(-0.757, 0.586, 0)]]), bonds: [[0, 1], [0, 2]], n: NM(900) });
+        T.push({ name: 'K+', atoms: [['K', V(0, 0, 0)]], bonds: [], n: NM(80) });
+        T.push({ name: 'Na+', atoms: [['Na', V(0, 0, 0)]], bonds: [], n: NM(25) });
+        T.push({ name: 'Cl-', atoms: [['Cl', V(0, 0, 0)]], bonds: [], n: NM(35) });
+        T.push({ name: 'Mg2+', atoms: [['Mg', V(0, 0, 0)]], bonds: [], n: NM(10) });
+        T.push({ name: 'Ca2+', atoms: [['Ca', V(0, 0, 0)]], bonds: [], n: NM(1) });
+        // metabolites: 3D shapes precomputed from their structures (hydrogens added to normal valence, charged as at pH 7)
+        const MOLDATA = {"succinate": {"a": "C 0.11 -0.76 -1.51,O -0.68 -1.59 -1.98,O 0.48 0.39 -2.29,C 0.52 -0.83 -0.04,C -0.48 -0.03 0.80,C -0.13 1.46 0.72,O -0.97 2.26 0.29,O 1.04 1.95 1.38,H 1.52 -0.42 0.08,H 0.51 -1.87 0.28,H -0.42 -0.36 1.84,H -1.49 -0.19 0.42", "b": "0-1,0-2,0-3,3-4,4-5,5-6,5-7,3-8,3-9,4-10,4-11", "x": "0-1,5-6"}, "fumarate": {"a": "C -0.00 -0.49 -1.87,O -0.71 -1.47 -2.15,O 0.08 0.61 -2.79,C 0.51 -0.31 -0.43,C -0.14 0.52 0.40,C -0.22 0.18 1.90,O 0.36 0.90 2.72,O -1.07 -0.88 2.34,H 1.53 -0.62 -0.19,H -0.33 1.55 0.08", "b": "0-1,0-2,0-3,3-4,4-5,5-6,5-7,3-8,4-9", "x": "0-1,3-4,5-6"}, "pyruvate": {"a": "C 0.48 0.92 -0.59,C -0.35 -0.35 -0.40,O -1.17 -0.68 -1.27,C -0.33 -1.07 0.95,O 0.67 -1.73 1.28,O -1.34 -0.77 1.92,H 0.55 1.16 -1.65,H 1.48 0.76 -0.19,H 0.01 1.75 -0.06", "b": "0-1,1-2,1-3,3-4,3-5,0-6,0-7,0-8", "x": "1-2,3-4"}, "lactate": {"a": "C 0.98 0.44 0.38,C -0.17 -0.02 -0.51,O -1.11 1.04 -0.68,C -0.87 -1.22 0.14,O -0.71 -2.36 -0.33,O -1.50 -1.07 1.42,H 1.59 1.17 -0.16,H 1.59 -0.41 0.66,H 0.58 0.91 1.28,H 0.21 -0.32 -1.49,H -0.58 1.84 -0.72", "b": "0-1,1-2,1-3,3-4,3-5,0-6,0-7,0-8,1-9,2-10", "x": "3-4"}, "testosterone": {"a": "C -0.54 0.84 2.29,C 0.63 0.97 3.27,C 0.98 2.45 3.48,C 1.12 3.28 2.17,C 0.92 2.50 1.05,C 2.21 1.96 0.42,C 1.96 0.95 -0.68,C 0.82 -0.01 -0.24,C -0.45 0.84 -0.22,C -0.39 1.71 1.05,C -1.71 0.02 -0.31,C -1.52 -1.47 -0.11,C -0.44 -2.09 -0.96,C 0.76 -1.17 -1.18,C 0.72 -0.73 -2.66,C -0.02 -1.88 -3.39,C -1.01 -2.45 -2.35,C 0.06 -3.38 -0.28,C -1.55 2.72 1.01,O 0.81 3.01 4.56,O -1.12 -3.85 -2.51,H -1.46 1.12 2.81,H -0.62 -0.21 2.00,H 0.35 0.53 4.23,H 1.50 0.45 2.87,H 0.73 4.29 2.15,H 2.83 1.51 1.21,H 2.77 2.81 0.01,H 2.85 0.36 -0.87,H 1.65 1.45 -1.59,H 1.05 -0.34 0.78,H -0.41 1.53 -1.08,H -2.17 0.18 -1.31,H -2.45 0.38 0.42,H -1.34 -1.70 0.95,H -2.48 -1.97 -0.36,H 1.67 -1.79 -1.06,H 0.15 0.18 -2.76,H 1.72 -0.63 -3.05,H -0.54 -1.50 -4.25,H 0.70 -2.65 -3.66,H -1.97 -1.97 -2.48,H 0.66 -3.95 -0.99,H -0.80 -3.97 0.04,H 0.67 -3.11 0.58,H -2.49 2.21 1.18,H -1.39 3.46 1.80,H -1.55 3.22 0.05,H -1.90 -4.11 -2.02", "b": "0-1,1-2,2-3,3-4,4-9,9-0,4-5,5-6,6-7,7-8,8-9,8-10,10-11,11-12,12-13,13-7,12-16,16-15,15-14,14-13,2-19,16-20,12-17,9-18,0-21,0-22,1-23,1-24,3-25,5-26,5-27,6-28,6-29,7-30,8-31,10-32,10-33,11-34,11-35,13-36,14-37,14-38,15-39,15-40,16-41,17-42,17-43,17-44,18-45,18-46,18-47,20-48", "x": "3-4,2-19"}, "acetylCoA": {"a": "C -3.59 5.23 -2.90,C -4.38 4.03 -2.37,O -5.40 3.66 -2.98,S -3.64 2.94 -1.12,C -3.97 3.62 0.53,C -3.17 4.90 0.73,N -2.53 4.88 2.06,C -1.40 5.78 2.33,O -1.59 7.00 2.37,C 0.03 5.23 2.37,C 0.15 4.17 3.47,N -0.47 2.92 3.02,C 0.16 2.14 1.93,O 0.82 1.13 2.25,C -0.56 2.13 0.57,O -1.58 1.13 0.59,C 0.43 1.85 -0.56,C 0.34 0.39 -0.99,C 0.06 2.75 -1.76,C 1.86 2.17 -0.13,O 2.78 1.77 -1.13,P 3.32 0.27 -0.68,O 4.87 0.26 -0.79,O 2.91 -0.06 0.91,O 2.65 -0.88 -1.66,P 3.92 -1.91 -1.93,O 3.41 -3.14 -2.75,O 5.05 -1.14 -2.92,O 4.65 -2.37 -0.55,C 3.88 -3.24 0.21,C 2.58 -3.76 -0.38,O 2.81 -4.98 -1.11,C 1.79 -5.91 -0.79,C 1.32 -5.59 0.65,C 1.60 -4.08 0.78,O 2.11 -6.32 1.57,O 2.16 -3.78 2.04,P 0.82 -3.61 3.01,O 1.22 -3.86 4.49,O -0.34 -4.72 2.56,O 0.21 -2.07 2.86,N 0.62 -5.70 -1.68,C -0.58 -6.60 -1.31,N -1.56 -5.82 -0.87,C -1.12 -4.37 -0.87,C -2.17 -3.28 -1.13,N -2.27 -2.88 -2.37,C -1.00 -2.73 -3.11,N -0.06 -3.59 -2.92,C 0.07 -4.26 -1.60,N -2.29 -2.21 -0.10,H -3.80 5.36 -3.96,H -2.52 5.04 -2.76,H -3.88 6.12 -2.35,H -3.68 2.88 1.28,H -5.04 3.83 0.62,H -2.39 4.97 -0.04,H -3.83 5.76 0.66,H -3.06 4.51 2.84,H 0.27 4.78 1.40,H 0.72 6.04 2.57,H -0.36 4.53 4.37,H 1.20 4.00 3.69,H -1.43 2.72 3.26,H -1.02 3.11 0.41,H -1.25 0.45 1.19,H -0.70 0.13 -1.19,H 0.73 -0.25 -0.20,H 0.92 0.24 -1.90,H 0.08 3.79 -1.45,H 0.78 2.59 -2.56,H -0.94 2.49 -2.10,H 1.94 3.27 0.01,H 2.08 1.71 0.82,H 4.49 -4.13 0.48,H 3.64 -2.76 1.18,H 2.12 -3.03 -1.03,H 2.13 -6.92 -0.85,H 0.27 -5.80 0.75,H 0.67 -3.54 0.62,H 3.02 -6.26 1.25,H -0.86 -7.32 -2.08,H -0.73 -1.74 -3.50,H -3.00 -2.32 0.61,H -1.45 -1.70 0.13", "b": "0-1,1-2,1-3,3-4,4-5,5-6,6-7,7-8,7-9,9-10,10-11,11-12,12-13,12-14,14-15,14-16,16-17,16-18,16-19,19-20,20-21,21-22,21-23,21-24,24-25,25-26,25-27,25-28,28-29,29-30,30-31,31-32,32-33,33-34,34-30,33-35,34-36,36-37,37-38,37-39,37-40,32-41,41-42,42-43,43-44,44-45,45-46,46-47,47-48,48-49,49-44,49-41,45-50,0-51,0-52,0-53,4-54,4-55,5-56,5-57,6-58,9-59,9-60,10-61,10-62,11-63,14-64,15-65,17-66,17-67,17-68,18-69,18-70,18-71,19-72,19-73,29-74,29-75,30-76,32-77,33-78,34-79,35-80,42-81,47-82,50-83,50-84", "x": "1-2,6-7,7-8,11-12,12-13,21-22,25-26,37-38,42-43,45-46,47-48,49-44"}};
+        const parseMol = (d) => ({ atoms: d.a.split(',').map(s => { const [e, x, y, z] = s.split(' '); return [e, V(+x, +y, +z)]; }),
+                                   bonds: d.b.split(',').map(s => s.split('-').map(Number)),
+                                   fixed: new Set(d.x ? d.x.split(',') : []) });          // double and amide bonds: no free rotation
+        [['succinate', NM(12)], ['fumarate', NM(12)], ['pyruvate', NM(15)], ['lactate', NM(15)], ['acetylCoA', NM(4)], ['testosterone', NM(3)]]
+            .forEach(([name, n]) => T.push(Object.assign({ name, n }, parseMol(MOLDATA[name]))));
+        const mk = () => { const atoms = [], bonds = []; return { atoms, bonds, add: (el, p, j) => { atoms.push([el, p]); if (j != null) bonds.push([j, atoms.length - 1]); return atoms.length - 1; } }; };
+        { const m = mk(), ring = [];
+          for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; ring.push(V(1.45 * Math.cos(a), 1.45 * Math.sin(a), k % 2 ? 0.25 : -0.25)); }
+          const ri = ring.map((p, k) => m.add(k === 0 ? 'O' : 'C', p));
+          for (let k = 0; k < 6; k++) m.bonds.push([ri[k], ri[(k + 1) % 6]]);
+          for (let k = 1; k <= 5; k++) {
+            const p = ring[k], sg = k % 2 ? 1 : -1, rd = V(p.x, p.y, 0).normalize();
+            const eq = rd.clone().multiplyScalar(0.94).add(V(0, 0, -0.33 * sg)).normalize(), ax = V(0, 0, sg);
+            m.add('H', p.clone().addScaledVector(ax, 1.09), ri[k]);
+            if (k < 5) { const o = m.add('O', p.clone().addScaledVector(eq, 1.43), ri[k]);
+                         m.add('H', m.atoms[o][1].clone().addScaledVector(eq.clone().multiplyScalar(0.35).addScaledVector(ax, -0.94).normalize(), 0.96), o); }
+            else { const c6 = m.add('C', p.clone().addScaledVector(eq, 1.52), ri[k]), P6 = m.atoms[c6][1];
+                   const o6 = m.add('O', P6.clone().addScaledVector(eq.clone().add(V(0, 0, 0.6)).normalize(), 1.43), c6);
+                   m.add('H', P6.clone().add(V(0, 0, -1.05)), c6); m.add('H', P6.clone().addScaledVector(V(-eq.y, eq.x, 0), 1.05), c6);
+                   m.add('H', m.atoms[o6][1].clone().add(V(0.4, 0.5, 0.6).normalize().multiplyScalar(0.96)), o6); }
+          }
+          T.push({ name: 'glucose', atoms: cen(m.atoms), bonds: m.bonds, n: NM(35) }); }
+        { const m = mk(), r6 = 1.39, ang = (d) => d * Math.PI / 180;
+          const hx = (d) => V(r6 * Math.cos(ang(d)), r6 * Math.sin(ang(d)), 0);
+          const N1 = m.add('N', hx(90)), C2 = m.add('C', hx(150), N1), N3 = m.add('N', hx(210), C2), C4 = m.add('C', hx(270), N3), C5 = m.add('C', hx(330), C4), C6 = m.add('C', hx(30), C5);
+          m.bonds.push([C6, N1]);
+          const pC4 = m.atoms[C4][1], pC5 = m.atoms[C5][1], mid = pC4.clone().add(pC5).multiplyScalar(0.5), nrm = mid.clone().normalize();
+          const ctr = mid.clone().addScaledVector(nrm, 0.95), R5 = 1.174;
+          const a4 = Math.atan2(pC4.y - ctr.y, pC4.x - ctr.x), a5 = Math.atan2(pC5.y - ctr.y, pC5.x - ctr.x);
+          let dl = a5 - a4; while (dl > Math.PI) dl -= 2 * Math.PI; while (dl < -Math.PI) dl += 2 * Math.PI;
+          const pp = (a) => V(ctr.x + R5 * Math.cos(a), ctr.y + R5 * Math.sin(a), 0);
+          const N7 = m.add('N', pp(a5 + dl), C5), C8 = m.add('C', pp(a5 + 2 * dl), N7), N9 = m.add('N', pp(a5 + 3 * dl), C8); m.bonds.push([N9, C4]);
+          const out = (i, c, d) => m.atoms[i][1].clone().sub(c).normalize().multiplyScalar(d).add(m.atoms[i][1]);
+          const N6 = m.add('N', out(C6, V(0, 0, 0), 1.34), C6); const pN6 = m.atoms[N6][1];
+          { const b = pN6.clone().sub(m.atoms[C6][1]).normalize(), q = V(-b.y, b.x, 0);
+            m.add('H', pN6.clone().addScaledVector(b.clone().multiplyScalar(0.5).addScaledVector(q, 0.866), 1.01), N6);
+            m.add('H', pN6.clone().addScaledVector(b.clone().multiplyScalar(0.5).addScaledVector(q, -0.866), 1.01), N6); }
+          m.add('H', out(C2, V(0, 0, 0), 1.08), C2); m.add('H', out(C8, ctr, 1.08), C8);
+          const u = m.atoms[N9][1].clone().sub(ctr).normalize(), w = V(0, 0, 1);
+          const C1r = m.add('C', out(N9, ctr, 1.47), N9), pC1 = m.atoms[C1r][1], rc = pC1.clone().addScaledVector(u, 1.2);
+          const rp = (k) => rc.clone().addScaledVector(u, -1.2 * Math.cos(ang(72 * k))).addScaledVector(w, 1.2 * Math.sin(ang(72 * k)));
+          const C2r = m.add('C', rp(1), C1r), C3r = m.add('C', rp(2), C2r), C4r = m.add('C', rp(3), C3r), O4r = m.add('O', rp(4), C4r); m.bonds.push([O4r, C1r]);
+          const O2r = m.add('O', out(C2r, rc, 1.43), C2r), O3r = m.add('O', out(C3r, rc, 1.43), C3r);
+          m.add('H', out(O2r, rc, 0.96), O2r); m.add('H', out(O3r, rc, 0.96), O3r);
+          let prev = C4r, at = m.atoms[C4r][1].clone(); const dir = m.atoms[C4r][1].clone().sub(rc).normalize();
+          const side = new THREE.Vector3().crossVectors(dir, w).normalize();
+          const chainEl = ['C', 'O', 'P', 'O', 'P', 'O', 'P'], len = { C: 1.51, O: 1.5, P: 1.6 };
+          chainEl.forEach((el, k) => {
+            at = at.clone().addScaledVector(dir, len[el] * 0.87).addScaledVector(side, (k % 2 ? 1 : -1) * len[el] * 0.5);
+            const pPrev = m.atoms[prev][1], i = m.add(el, at, prev); prev = i;
+            if (el === 'P') {
+                const a = pPrev.clone().sub(at).normalize();
+                if (k < 6) {
+                    const b = dir.clone().multiplyScalar(0.87).addScaledVector(side, ((k + 1) % 2 ? 1 : -1) * 0.5).normalize();
+                    const bis = a.clone().add(b).negate().normalize(), nr = new THREE.Vector3().crossVectors(a, b).normalize();
+                    for (const sg of [1, -1]) m.add('O', at.clone().addScaledVector(bis.clone().multiplyScalar(0.58).addScaledVector(nr, 0.82 * sg).normalize(), 1.5), i);
+                } else {
+                    const s1 = perpPart(w, a).normalize(), s2 = new THREE.Vector3().crossVectors(a, s1);
+                    for (let j = 0; j < 3; j++) { const th = j * 2 * Math.PI / 3;
+                        m.add('O', at.clone().addScaledVector(a.clone().multiplyScalar(-0.33).addScaledVector(s1, 0.94 * Math.cos(th)).addScaledVector(s2, 0.94 * Math.sin(th)).normalize(), 1.5), i); }
+                }
+            }
+          });
+          T.push({ name: 'ATP', atoms: cen(m.atoms), bonds: m.bonds, n: NM(30) }); }
+
+        // ---- flexible molecules: every single bond that is not in a ring (and not a double or amide bond) can twist
+        //      freely. Each twist angle drifts with random kicks, like the tumbling; a twist that would push two
+        //      parts of the molecule into each other is undone and bounces back.
+        function findRotors(t) {
+            const n = t.atoms.length, nb = Array.from({ length: n }, () => []), fixed = t.fixed || new Set();
+            t.bonds.forEach(([i, j]) => { nb[i].push(j); nb[j].push(i); });
+            const sideFrom = (start, block) => {            // atoms reachable from start without crossing start–block (null = ring bond)
+                const seen = new Set([start]), stack = [start];
+                while (stack.length) { const v = stack.pop(); for (const w of nb[v]) {
+                    if (v === start && w === block) continue;
+                    if (w === block) return null;
+                    if (!seen.has(w)) { seen.add(w); stack.push(w); } } }
+                return [...seen];
+            };
+            t.rot = [];
+            t.bonds.forEach(([a, c]) => {
+                if (fixed.has(a + '-' + c) || fixed.has(c + '-' + a) || nb[a].length < 2 || nb[c].length < 2) return;
+                let piv = a, mov = c, set = sideFrom(c, a);
+                if (!set) return;
+                if (set.length > n - set.length) { piv = c; mov = a; set = sideFrom(a, c); }   // turn the smaller half
+                t.rot.push({ a: piv, c: mov, side: set.filter(i => i !== mov), K: 10 / Math.sqrt(set.length) });
+            });
+            if (!t.rot.length) return;
+            // atom pairs 4+ bonds apart may not get closer than this (or than they start, if already closer)
+            const cp = [], cl = [];
+            for (let i = 0; i < n; i++) {
+                const dist = new Array(n).fill(99); dist[i] = 0; const q = [i];
+                while (q.length) { const v = q.shift(); for (const w of nb[v]) if (dist[w] > dist[v] + 1) { dist[w] = dist[v] + 1; q.push(w); } }
+                for (let j = i + 1; j < n; j++) {
+                    if (dist[j] < 4) continue;
+                    const heavy = t.atoms[i][0] !== 'H' && t.atoms[j][0] !== 'H', lim = Math.min(heavy ? 2.6 : 1.7, t.atoms[i][1].distanceTo(t.atoms[j][1]) - 0.05);
+                    cp.push(i, j); cl.push(lim * lim);
+                }
+            }
+            t.cp = cp; t.cl = cl;
+        }
+        T.forEach(findRotors);
+        const qx = new THREE.Quaternion(), axv = V(0, 0, 0);
+        function conform(m) {
+            const t = m.t, lc = m.lc;
+            for (let i = 0; i < lc.length; i++) lc[i].copy(t.atoms[i][1]);
+            for (let k = 0; k < t.rot.length; k++) {
+                const r = t.rot[k], o = lc[r.c];
+                axv.copy(o).sub(lc[r.a]).normalize(); qx.setFromAxisAngle(axv, m.th[k]);
+                for (const i of r.side) lc[i].sub(o).applyQuaternion(qx).add(o);
+            }
+        }
+        function clashes(m) {
+            const lc = m.lc, cp = m.t.cp, cl = m.t.cl;
+            for (let k = 0, n = cl.length; k < n; k++) if (lc[cp[2 * k]].distanceToSquared(lc[cp[2 * k + 1]]) < cl[k]) return true;
+            return false;
+        }
+        function flex(m, dt) {
+            const R = m.t.rot;
+            if (!m.th) { m.th = new Float32Array(R.length); m.om = new Float32Array(R.length); m.th0 = new Float32Array(R.length); m.lc = m.t.atoms.map(([, l]) => l.clone()); }
+            m.th0.set(m.th);
+            const damp = Math.exp(-1.5 * dt);
+            for (let k = 0; k < R.length; k++) { m.om[k] = (m.om[k] + gauss() * R[k].K * dt) * damp; m.th[k] += m.om[k] * dt; }
+            conform(m);
+            if (clashes(m)) { m.th.set(m.th0); for (let k = 0; k < R.length; k++) m.om[k] *= -0.5; conform(m); }
+        }
+        const count = {}; T.forEach(t => t.atoms.forEach(([e]) => count[e] = (count[e] || 0) + t.n));
+        const nb = T.reduce((a, t) => a + t.bonds.length * t.n, 0);
+        // every mesh (and outline shell) is on layer 0 and 1: drawn sharp in front of the enzyme, blurred behind it
+        const both = (m) => { m.layers.enable(1); return m; };
+        const meshes = {};
+        for (const e in count) {
+            meshes[e] = both(inst(sphereLo, toonMat(COL[e], { split: true }), count[e]));
+            meshes[e].userData.ink = both(shell(meshes[e], INK_S)); idHook(meshes[e], true);
+        }
+        const bondMat = toonMat(BOND_COL, { split: true, transparent: true });
+        const bondMesh = both(inst(new THREE.CylinderGeometry(1, 1, 1, 8), bondMat, nb));
+        const bondInk = both(shell(bondMesh, INK_S, cylGeo));
+
+        const GH = 1.5, occ = new Map(), gp = V(0, 0, 0);
+        const allowed = (p) => {
+            if (p.length() < 16) return false;
+            const ix = Math.floor(p.x / GH), iy = Math.floor(p.y / GH), iz = Math.floor(p.z / GH), k = (ix + 512) + 1024 * ((iy + 512) + 1024 * (iz + 512));
+            let o = occ.get(k);
+            if (o === undefined) { if (occ.size > 1500000) occ.clear(); gp.set((ix + 0.5) * GH, (iy + 0.5) * GH, (iz + 0.5) * GH);
+                o = protein.field(gp) > 2.6; occ.set(k, o); }
+            return o && !dna.near(p, 4.5);
+        };
+        let sd = 24680; const rr = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+        const gauss = () => { let u = 0; while (!u) u = rr(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rr()); };
+        // camera-view frame in the molecules' own coordinates (auto-rotate turns the whole group)
+        const Mv = new THREE.Matrix4(), cq = V(0, 0, 0);
+        function viewFrame() { camera.updateMatrixWorld(); world.updateMatrixWorld(); Mv.multiplyMatrices(camera.matrixWorldInverse, world.matrixWorld); }
+        const mols = [];
+        T.forEach(t => { for (let i = 0; i < t.n; i++) {
+            const p = V(0, 0, 0);
+            for (let k = 0; k < 60; k++) {           // uniform in the sphere, outside the DNA and protein
+                const u = V(gauss(), gauss(), gauss()).normalize().multiplyScalar(R * Math.cbrt(rr()));
+                p.copy(CTR).add(u); if (allowed(p)) break;
+            }
+            mols.push({ t, p, rank: rr(), v: V(gauss(), gauss(), gauss()).multiplyScalar(2), q: new THREE.Quaternion().setFromAxisAngle(V(rr() - 0.5, rr() - 0.5, rr() - 0.5).normalize(), 6.28 * rr()),
+                        w: V(rr() - 0.5, rr() - 0.5, rr() - 0.5).normalize(), ws: 0.6 + 1.2 * rr(), h: 1, wp: t.atoms.map(() => V(0, 0, 0)) });
+        } });
+        const M = new THREE.Matrix4(), q0b = new THREE.Quaternion(), qb = new THREE.Quaternion(), dqm = new THREE.Quaternion(), prev = V(0, 0, 0);
+        const rax = V(0, 0, 0);
+        const sc = V(1, 1, 1), mid = V(0, 0, 0), d = V(0, 0, 0), camP = V(0, 0, 0), tgt = V(0, 0, 0), los = V(0, 0, 0), rel = V(0, 0, 0);
+        // ---- molecule–molecule collisions: each molecule is a soft ball (its size from its atoms); overlapping pairs
+        //      are pushed apart and bounce off each other, heavier molecules recoiling less
+        T.forEach(t => {
+            t.rc0 = Math.sqrt(t.atoms.reduce((s2, [, l]) => s2 + l.lengthSq(), 0) / t.atoms.length);
+            t.mass = t.atoms.reduce((s2, [e]) => s2 + (e === 'H' ? 1 : 12), 0);
+        });
+        const CELL = 2 * Math.max(...T.map(t => t.rc0)) + 2.4, grid = new Map(), nrm = V(0, 0, 0), old = V(0, 0, 0);
+        const ckey = (x, y, z) => ((Math.floor(x / CELL) + 512) * 1024 + (Math.floor(y / CELL) + 512)) * 1024 + (Math.floor(z / CELL) + 512);
+        function collide(sf) {
+            const pad = lerp(0.35, 1.15, sf);                 // atom size: small in ball-and-stick, full in space-filling
+            grid.clear();
+            for (const m of mols) { if (!m.on) continue; const k = ckey(m.p.x, m.p.y, m.p.z); let l = grid.get(k); if (!l) grid.set(k, l = []); l.push(m); }
+            for (const m of mols) {
+                if (!m.on) continue;
+                const rm = m.t.rc0 + pad, cx = Math.floor(m.p.x / CELL), cy = Math.floor(m.p.y / CELL), cz = Math.floor(m.p.z / CELL);
+                for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+                    const l = grid.get(((cx + a + 512) * 1024 + (cy + b + 512)) * 1024 + (cz + c + 512)); if (!l) continue;
+                    for (const o of l) {
+                        if (o === m || o.rank < m.rank) continue;        // each pair once
+                        nrm.copy(o.p).sub(m.p); const d = nrm.length(), rs = rm + o.t.rc0 + pad;
+                        if (d >= rs || d < 1e-4) continue;
+                        nrm.multiplyScalar(1 / d);
+                        const mm = m.t.mass, mo = o.t.mass, over = rs - d;
+                        old.copy(m.p); m.p.addScaledVector(nrm, -over * mo / (mm + mo)); if (!allowed(m.p)) m.p.copy(old);
+                        old.copy(o.p); o.p.addScaledVector(nrm, over * mm / (mm + mo)); if (!allowed(o.p)) o.p.copy(old);
+                        const vrel = o.v.dot(nrm) - m.v.dot(nrm);
+                        if (vrel < 0) {                                  // approaching: bounce (slightly inelastic)
+                            const J = -1.9 * vrel / (1 / mm + 1 / mo);
+                            m.v.addScaledVector(nrm, -J / mm); o.v.addScaledVector(nrm, J / mo);
+                            m.w.x += gauss() * 0.4; m.w.y += gauss() * 0.4; m.w.z += gauss() * 0.4; m.w.normalize();   // a knock sets it spinning a new way
+                            o.w.x += gauss() * 0.4; o.w.y += gauss() * 0.4; o.w.z += gauss() * 0.4; o.w.normalize();
+                        }
+                    }
+                }
+            }
+        }
+        function step(dt, sf) {
+            // work in the molecules' own (group) frame, since auto-rotate turns the whole group
+            camP.copy(camera.position); world.worldToLocal(camP);
+            tgt.copy(controls.target); world.worldToLocal(tgt);
+            los.copy(tgt).sub(camP); const Lt = los.length(); los.multiplyScalar(1 / Lt);
+            const clear = 1 - smooth(45, 70, Lt), ease = Math.min(1, dt * 6);
+            const focus = smooth(32, 55, camP.length());           // close to the active site: the cytosol steps aside
+            viewFrame();
+            const cut = conc / FMAX, zFar = scene.fog.far + 10, tHm = tanV * camera.aspect * 1.15, tVm = tanV * 1.15;
+            for (const m of mols) {
+                // only molecules switched on by the concentration control, and inside the camera's view, are simulated and drawn
+                m.on = m.rank < cut;
+                if (m.on) { cq.copy(m.p).applyMatrix4(Mv); const z = -cq.z;
+                    m.on = z > 0.5 && z < zFar && Math.abs(cq.x) < z * tHm + 6 && Math.abs(cq.y) < z * tVm + 6; }
+                if (!m.on) continue;
+                const na = m.t.atoms.length, kick = m.t.name === 'water' ? 16 : na === 1 ? 12 : na > 30 ? 6 : 9;
+                m.v.x += gauss() * kick * dt; m.v.y += gauss() * kick * dt; m.v.z += gauss() * kick * dt;
+                m.v.multiplyScalar(Math.exp(-1.4 * dt)); const vmax = m.t.name === 'water' ? 10 : 7; if (m.v.length() > vmax) m.v.setLength(vmax);
+                prev.copy(m.p); m.p.addScaledVector(m.v, dt);
+                if ((!allowed(m.p) && allowed(prev)) || m.p.distanceToSquared(CTR) > R2) { m.p.copy(prev); m.v.multiplyScalar(-0.8); }   // bounce off DNA, protein and the sphere's edge
+                dqm.setFromAxisAngle(m.w, m.ws * dt); m.q.multiply(dqm);
+                if (m.t.rot && m.t.rot.length && dt > 0) flex(m, dt);   // twist about single bonds
+                rel.copy(m.p).sub(camP); const along = rel.dot(los), lat = Math.sqrt(Math.max(0, rel.lengthSq() - along * along));
+                let want = focus;
+                if (clear > 0 && along > -3 && along < Lt + 6 && lat < 7 + 0.12 * Math.max(0, along)) want = Math.min(want, 1 - clear);
+                if (rel.length() < 6) want = 0;
+                m.h = dt > 0 ? lerp(m.h, want, ease) : want;
+            }
+            if (dt > 0) collide(sf);
+            const ix = {}; let ib = 0;
+            for (const m of mols) {
+                if (!m.on || m.h < 0.02) continue;                  // packed: only visible molecules go into the instance buffers
+                const w = m.wp, hh = m.h;
+                const lc = m.lc;
+                m.t.atoms.forEach(([e, l], k) => w[k].copy(lc ? lc[k] : l).applyQuaternion(m.q).add(m.p));
+                m.t.atoms.forEach(([e], k) => { const r = lerp(BS_R[e], SF_R[e], sf) * hh; sc.set(r, r, r); M.compose(w[k], q0b, sc); meshes[e].setMatrixAt(ix[e] = (ix[e] || 0), M); ix[e]++; });
+                for (const [i0, i1] of m.t.bonds) {
+                    d.copy(w[i1]).sub(w[i0]); const L = d.length();
+                    mid.copy(w[i0]).addScaledVector(d, 0.5); qb.setFromUnitVectors(UP, d.multiplyScalar(1 / L));
+                    sc.set(BOND_R * hh, L * (hh > 0 ? 1 : 0), BOND_R * hh); M.compose(mid, qb, sc); bondMesh.setMatrixAt(ib++, M);
+                }
+            }
+            for (const e in meshes) { const n = ix[e] || 0; meshes[e].count = meshes[e].userData.ink.count = n; meshes[e].instanceMatrix.needsUpdate = true; }
+            bondMesh.count = bondInk.count = ib; bondMesh.instanceMatrix.needsUpdate = true;
+            bondMesh.visible = sf < 0.99; bondMat.uniforms.uOpacity.value = 1 - sf; bondMat.depthWrite = sf < 0.02;
+            bondInk.visible = sf < 0.02;
+        }
+        step(0, 1);
+        return { step, CTR, setConcentration(f) { conc = f; } };
+    })();
+
+    // =====================================================================
+    //  State, camera moves, auto-rotate
+    // =====================================================================
+    const st = { sf: true, sfT: 1, sfA: 1, rot: { x: false, y: true, z: false }, speed: 3, paused: false, dnaSpeed: 1 };
+    let camAnim = null;
+    function goView(name) {
+        const v = VIEWS[name];
+        world.position.set(0, 0, 0); world.quaternion.identity();
+        const fromDir = camera.position.clone().sub(controls.target);
+        camAnim = { t: 0, fromT: controls.target.clone(), toT: v.target.clone(), fromDir: fromDir.clone().normalize(), toDir: v.dir.clone(),
+                    fromDist: fromDir.length(), toDist: v.dist };
+    }
+    function stepCamera(dt) {
+        if (!camAnim) return;
+        camAnim.t = Math.min(1, camAnim.t + dt / 1.4);
+        const k = smooth(0, 1, camAnim.t);
+        const dir = camAnim.fromDir.clone().lerp(camAnim.toDir, k).normalize();
+        controls.target.copy(camAnim.fromT).lerp(camAnim.toT, k);
+        camera.position.copy(controls.target).addScaledVector(dir, lerp(camAnim.fromDist, camAnim.toDist, k));
+        camera.lookAt(controls.target);
+        if (camAnim.t >= 1) camAnim = null;
+    }
+    const axX = V(0, 0, 0), axY = V(0, 0, 0), axZ = V(0, 0, 0), rq = new THREE.Quaternion();
+    function stepRotate(dt) {
+        const r = st.rot; if (!(r.x || r.y || r.z)) return;
+        camera.updateMatrixWorld();
+        axX.setFromMatrixColumn(camera.matrixWorld, 0); axY.setFromMatrixColumn(camera.matrixWorld, 1); axZ.setFromMatrixColumn(camera.matrixWorld, 2);
+        const a = st.speed * deg * dt, pivot = controls.target;
+        [[r.x, axX], [r.y, axY], [r.z, axZ]].forEach(([on, ax]) => {
+            if (!on) return;
+            rq.setFromAxisAngle(ax, a);
+            world.quaternion.premultiply(rq);
+            world.position.sub(pivot).applyQuaternion(rq).add(pivot);
+        });
+    }
+
+    // =====================================================================
+    //  Controls
+    // =====================================================================
+    const $ = (id) => document.getElementById(id);
+    const topbar = $('topbar');
+    $('info-tab').addEventListener('click', (e) => { const open = $('caption').hidden; $('caption').hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open)); });
+    $('tab').addEventListener('click', () => { const c = topbar.classList.toggle('collapsed'); $('tab').setAttribute('aria-expanded', String(!c)); });
+    if (WP.crowd != null) $('s-conc').value = WP.crowd;
+    if (WP.spin != null) $('s-speed').value = WP.spin;
+    const bindSlider = (id, fmt, fn) => { const el = $(id), out = $('v' + id.slice(1)); const f = () => { out.textContent = fmt(+el.value); fn(+el.value); }; el.addEventListener('input', f); f(); };
+    bindSlider('s-outline', v => v.toFixed(1) + ' px', v => { TOON.px.value = v * DPR; TOON.protPx.value = v * 1.5 * DPR; });
+    bindSlider('s-thin', v => v.toFixed(1) + ' px', v => { EDGE.w = v; });
+    bindSlider('s-shade', v => v.toFixed(2), v => { TOON.shade.value = lerp(-0.9, 0.6, v); });   // 0 = almost no shadow, 1 = mostly shadow
+    bindSlider('s-hi', v => v.toFixed(2), v => { TOON.hi.value = 0.995 - 0.15 * v; });
+    bindSlider('s-opac', v => Math.round(v * 100) + '%', v => protein.setOpacity(v));
+    bindSlider('s-blur', v => v.toFixed(1) + ' px', v => { farRenderer.domElement.style.filter = v > 0 ? `blur(${v}px)` : 'none'; });
+    bindSlider('s-conc', v => Math.round(v * 100) + '%', v => bgMols.setConcentration(v));
+    bindSlider('s-dnasp', v => v.toFixed(1) + '×', v => { st.dnaSpeed = v; });
+    bindSlider('s-speed', v => v + '°/s', v => { st.speed = v; });
+    const pick = (a, b, on) => { $(a).classList.toggle('active', on); $(b).classList.toggle('active', !on); };
+    $('b-sf').addEventListener('click', () => { st.sf = true; pick('b-sf', 'b-bs', true); });
+    $('b-bs').addEventListener('click', () => { st.sf = false; pick('b-sf', 'b-bs', false); });
+    $('b-surf').addEventListener('click', () => { protein.setMode('surface'); pick('b-surf', 'b-patoms', true); });
+    $('b-patoms').addEventListener('click', () => { protein.setMode('atoms'); pick('b-surf', 'b-patoms', false); });
+    ['x', 'y', 'z'].forEach(k => $('b-r' + k).addEventListener('click', (e) => { st.rot[k] = !st.rot[k]; e.currentTarget.classList.toggle('active', st.rot[k]); }));
+    function setPaused(on) {
+        st.paused = on; const b = $('b-pause');
+        b.classList.toggle('active', on); b.textContent = on ? '▶ PLAY' : '⏸ PAUSE';
+    }
+    $('b-pause').addEventListener('click', () => setPaused(!st.paused));
+    window.addEventListener('keydown', (e) => {
+        if (e.code !== 'Space' || e.repeat) return;
+        const t = document.activeElement && document.activeElement.tagName;
+        if (t === 'INPUT' || t === 'BUTTON' || t === 'SELECT' || t === 'TEXTAREA') return;   // let focused controls handle Space
+        e.preventDefault(); setPaused(!st.paused);
+    });
+    $('b-ribbon').addEventListener('click', (e) => {
+        const on = !ribbons.group.visible; ribbons.group.visible = on;
+        e.currentTarget.classList.toggle('active', on); e.currentTarget.textContent = on ? 'RIBBONS: ON' : 'RIBBONS: OFF';
+    });
+    // arrow keys slide the scene left / right / up / down (held keys keep moving)
+    const keys = new Set();
+    const ARROWS = { ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1 };
+    window.addEventListener('keydown', (e) => {
+        if (!ARROWS[e.key] || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
+        keys.add(e.key); e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => keys.delete(e.key));
+    window.addEventListener('blur', () => keys.clear());
+    const panR = V(0, 0, 0), panU = V(0, 0, 0), panD = V(0, 0, 0);
+    function stepPan(dt) {
+        if (!keys.size) return;
+        camera.updateMatrixWorld();
+        panR.setFromMatrixColumn(camera.matrixWorld, 0); panU.setFromMatrixColumn(camera.matrixWorld, 1);
+        const sp = 0.6 * camera.position.distanceTo(controls.target) * dt;   // scales with zoom
+        panD.set(0, 0, 0);
+        if (keys.has('ArrowLeft')) panD.addScaledVector(panR, sp);           // scene moves left = camera moves right
+        if (keys.has('ArrowRight')) panD.addScaledVector(panR, -sp);
+        if (keys.has('ArrowUp')) panD.addScaledVector(panU, -sp);
+        if (keys.has('ArrowDown')) panD.addScaledVector(panU, sp);
+        camera.position.add(panD); controls.target.add(panD);
+    }
+    // background colour: the gradient behind both canvases, and fog that fades distant molecules into it
+    const BGS = [
+        { name: 'Deep blue', g: ['#1d6a93', '#0c3550', '#061a2a'], fog: 0x0c3550 },
+        { name: 'Teal', g: ['#3fa3a0', '#17606a', '#0b2f37'], fog: 0x17606a },
+        { name: 'Dusk violet', g: ['#6a5aa0', '#33295e', '#140f28'], fog: 0x33295e },
+        { name: 'Slate', g: ['#4b5563', '#2b333e', '#1c222b'], fog: 0x2b333e },
+        { name: 'Black', g: ['#1f2937', '#0b0f14', '#000000'], fog: 0x0b0f14 },
+        { name: 'Cream', g: ['#f7f6ec', '#ecebdc', '#dcdac6'], fog: 0xecebdc },
+        { name: 'White', g: ['#ffffff', '#f3f4f6', '#e2e5ea'], fog: 0xf3f4f6 }
+    ];
+    function makeSwatches(boxId, items, fill, onPick, first = 0) {
+        const box = $(boxId), btns = items.map((it, i) => {
+            const b = document.createElement('button'); b.className = 'sw' + (i === first ? ' active' : ''); b.title = it.name; b.setAttribute('aria-label', it.name);
+            b.style.background = fill(it); box.appendChild(b);
+            b.addEventListener('click', () => { btns.forEach(x => x.classList.toggle('active', x === b)); onPick(it); });
+            return b;
+        });
+        return btns;
+    }
+    makeSwatches('bg-sw', BGS, it => `radial-gradient(${it.g[0]}, ${it.g[2]})`, it => {
+        wrapEl.style.background = `radial-gradient(120% 90% at 50% 35%, ${it.g[0]} 0%, ${it.g[1]} 55%, ${it.g[2]} 100%)`;
+        scene.fog.color.setHex(it.fog);
+    });
+    // protein colour: surface + ribbons (ribbons a shade deeper so they read inside the see-through surface)
+    const PROT = [
+        { name: 'Lavender', c: '#b59cf0' }, { name: 'Mint', c: '#7dd3b0' }, { name: 'Peach', c: '#f6ad7b' }, { name: 'Sky', c: '#7cb8f2' },
+        { name: 'Rose', c: '#f08fb0' }, { name: 'Gold', c: '#f2c94c' }, { name: 'Silver', c: '#c9ced6' }
+    ];
+    function setProteinColor(hex) {
+        protein.colMat.uniforms.uColor.value.set(hex);
+        ribbons.mat.uniforms.uColor.value.set(hex).multiplyScalar(0.86);
+        pick2.value = hex;
+    }
+    const protBtns = makeSwatches('prot-sw', PROT, it => it.c, it => setProteinColor(it.c), 1);
+    const pick2 = document.createElement('input'); pick2.type = 'color'; pick2.className = 'sw-pick'; pick2.title = 'Custom color'; pick2.setAttribute('aria-label', 'Custom protein color');
+    $('prot-sw').appendChild(pick2);
+    pick2.addEventListener('input', () => { protBtns.forEach(b => b.classList.remove('active')); setProteinColor(pick2.value); });
+    setProteinColor(PROT[1].c);                  // mint by default
+    if (WP.prot != null && protBtns[WP.prot]) protBtns[WP.prot].click();
+    { const bgBtns = document.querySelectorAll('#bg-sw .sw'); if (WP.bg != null && bgBtns[WP.bg]) bgBtns[WP.bg].click(); }
+    $('v-overview').addEventListener('click', () => { if (START_VIEW) { camAnim = null; applyView(START_VIEW); } else goView('overview'); });
+    // Shift+V: copy the current view (camera + rotation) as text, to paste in as START_VIEW
+    window.addEventListener('keydown', (e) => {
+        if (!(e.shiftKey && e.code === 'KeyV')) return;
+        const r = (a) => a.map(x => +x.toFixed(4));
+        const txt = JSON.stringify({ cam: r(camera.position.toArray()), tgt: r(controls.target.toArray()), wq: r(world.quaternion.toArray()), wp: r(world.position.toArray()) });
+        let box = $('view-toast');
+        if (!box) { box = document.createElement('div'); box.id = 'view-toast';
+            box.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:20;max-width:min(90vw,640px);background:rgba(15,23,42,.95);color:#e2e8f0;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:10px 12px;font:12px/1.4 ui-monospace,Menlo,monospace;user-select:all;word-break:break-all';
+            document.body.appendChild(box); }
+        box.textContent = 'Current view (copied): ' + txt;
+        box.hidden = false; clearTimeout(box._t); box._t = setTimeout(() => { box.hidden = true; }, 12000);
+        try { navigator.clipboard.writeText(txt).catch(() => {}); } catch (err) {}
+    });
+    $('v-gap').addEventListener('click', () => goView('gap'));
+    $('v-front').addEventListener('click', () => goView('front'));
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight); farRenderer.setSize(window.innerWidth, window.innerHeight);
+        updateRes(); sizeId();
+    });
+
+    // =====================================================================
+    //  Main loop
+    // =====================================================================
+    const splitV = V(0, 0, 0), fwdV = V(0, 0, 0);
+    function renderAll() {
+        camera.getWorldDirection(fwdV);
+        splitV.copy(bgMols.CTR); world.localToWorld(splitV); splitV.sub(camera.position);
+        SPLIT.uSplit.value = Math.max(0, splitV.dot(fwdV));
+        SPLIT.uSide.value = 1; camera.layers.set(1); farRenderer.render(scene, camera);
+        SPLIT.uSide.value = -1; camera.layers.set(0); renderer.render(scene, camera);   // everything but the protein surface
+        renderer.autoClear = false;
+        if (idOK && EDGE.w > 0.01) {                                                     // thin lines where atoms meet
+            const fog = scene.fog; scene.fog = null; camera.layers.set(3);
+            scene.overrideMaterial = idMat;                          // 1) nearest atom + its depth
+            renderer.setRenderTarget(idRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
+            scene.overrideMaterial = peelMat;                        // 2) nearest surface of a different atom behind it
+            renderer.setRenderTarget(peelRT); renderer.clear(); renderer.render(scene, camera);
+            renderer.setRenderTarget(null); scene.overrideMaterial = null; scene.fog = fog;
+            const u = edgeMat.uniforms;                              // 3) smooth line where the two surfaces meet
+            u.uW.value = EDGE.w * DPR; u.uNear.value = camera.near; u.uFar.value = camera.far;
+            u.uFogNear.value = fog.near; u.uFogFar.value = fog.far;
+            renderer.render(edgeScene, edgeCam);
+        }
+        camera.layers.set(2); renderer.render(scene, camera);                           // see-through protein surface on top
+        renderer.autoClear = true; camera.layers.set(0);
+    }
+    let last = performance.now(), running = true;
+    const minGap = WP.fps > 0 ? 1000 / WP.fps - 2 : 0;
+    document.addEventListener('visibilitychange', () => {          // stop drawing when the wallpaper is covered or the screen is off
+        if (document.hidden) running = false;
+        else if (!running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
+    });
+    function frame(now) {
+        if (!running) return;
+        if (now - last < minGap) { requestAnimationFrame(frame); return; }
+        const dt = Math.min(0.05, (now - last) / 1000); last = now;
+        st.sfT = clamp(st.sfT + (st.sf ? 1 : -1) * dt / 1.3, 0, 1);
+        st.sfA = smooth(0, 1, st.sfT);
+        TOON.push.value = lerp(0.06, 1.2, st.sfA);       // per-atom outlines in ball-and-stick, whole-molecule outlines in space-filling
+        dna.undulate(st.paused ? 0 : dt * st.dnaSpeed, st.sfA);
+        if (!st.paused) TOON.flexT.value += dt * 0.35;      // the protein flexes slowly   // 0× holds the DNA still
+        dna.atoms.setSF(st.sfA); dna.bonds.update(st.sfA);
+        protein.update(st.sfA);
+        stepCamera(dt);
+        if (!st.paused) stepRotate(dt);                  // paused: molecules and auto-rotate freeze; you can still drag, zoom and pan
+        stepPan(dt);
+        bgMols.step(st.paused ? 0 : dt, st.sfA);
+        controls.update();
+        const camD = camera.position.length();
+        scene.fog.near = camD + 22; scene.fog.far = camD + 85;
+        renderAll();
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
